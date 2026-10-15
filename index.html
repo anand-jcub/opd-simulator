@@ -135,6 +135,16 @@
   details.more .card{border-color:#eceef1}
   .sect{padding:12px 2px;font-size:var(--s);color:var(--muted)}
   .sect h2{font-size:var(--m);color:var(--text);margin:0 0 8px}
+  .waits{margin:22px 0 8px;border-top:1px solid var(--line);padding-top:14px}
+  .waits h2{font-size:var(--m);margin:0 0 2px;font-weight:600} .waits h2 .sf{font-weight:400;color:var(--muted);font-size:var(--s)}
+  .wt{width:100%;border-collapse:collapse;font-size:var(--s);margin-top:10px;font-variant-numeric:tabular-nums}
+  .wt th,.wt td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  .wt th{color:var(--muted);font-weight:500} .wt th:first-child,.wt td:first-child{text-align:left}
+  .wt td.na{color:#b8bec6} .wt td.amb{background:#fbf1de;color:#8a5a12} .wt td.red{background:#f8e1de;color:var(--bad);font-weight:600}
+  .wt td.tot{font-weight:600} .wt tr.grp td{border-bottom:0;padding-top:12px;font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  .wt tr.grp.c td{color:var(--cur)} .wt tr.grp.p td{color:var(--prop)} .wt tr.grp.k td{color:var(--muted)}
+  .wt td .n{color:var(--muted);font-weight:400;font-size:11px}
+  .wnote{font-size:var(--s);color:var(--muted);margin:8px 2px 0}
 </style>
 </head>
 <body>
@@ -300,6 +310,11 @@
     </div>
   </div>
   </details>
+  <section class="waits" aria-label="Wait at each checkpoint">
+    <h2>Wait at each checkpoint (minutes) <span class="sf" id="wtState">so far</span></h2>
+    <table class="wt"><thead><tr><th></th><th>Registration</th><th>Triage</th><th>Vitals</th><th>Doctor</th><th>Pharmacy</th><th>Standing</th><th>Total time</th></tr></thead><tbody id="wtBody"></tbody></table>
+    <p class="wnote">Group rows average every patient who has arrived; Total time averages those who have finished (n done). “skipped” = that group does not pass the checkpoint. Shading: <span style="background:#fbf1de;color:#8a5a12;padding:0 4px;border-radius:3px">15–30 min</span> · <span style="background:#f8e1de;color:var(--bad);padding:0 4px;border-radius:3px;font-weight:600">30 min or more</span> for a single checkpoint wait (Standing and Total time are not shaded).</p>
+  </section>
 </div>
 
   <script>
@@ -1137,7 +1152,48 @@
       return `${String(hrs12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${period}`;
     }
 
+
+    function renderWaitTable() {
+      const body = document.getElementById('wtBody'); if (!body) return;
+      const done = simTime >= SIM_DURATION_MAX;
+      document.getElementById('wtState').textContent = done ? 'end of morning (01:30 PM)' : 'so far, at ' + formatClock(simTime);
+      const shade = v => v >= 30 ? 'red' : v >= 15 ? 'amb' : '';
+      const cell = (v, skip, sh) => skip ? '<td class="na">skipped</td>' : (v == null ? '<td class="na">–</td>' : `<td class="${sh ? shade(v) : ''}">${v.toFixed(1)}</td>`);
+      const avg = (a, f) => a.length ? a.reduce((x, p) => x + f(p), 0) / a.length : null;
+      const viaTriage = !!params.bookedViaTriage;
+      const row = (name, a, mode, kind) => {
+        if (!a.length) return `<tr><td>${name}</td><td class="na" colspan="7">no one yet</td></tr>`;
+        const fin = a.filter(p => p.completionTime != null);
+        const skReg = kind === 'booked' || kind === 'pin', skTri = mode === 'current' || (kind === 'booked' && !viaTriage);
+        const tot = avg(fin, p => p.completionTime - p.arrivalTime);
+        return `<tr><td>${name}</td>${cell(avg(a, p => p.regWaitTime), skReg, 1)}${cell(avg(a, p => p.triageWaitTime || 0), skTri, 1)}${cell(avg(a, p => p.vitalsWaitTime), 0, 1)}${cell(avg(a, p => p.consultWaitTime), 0, 1)}${cell(avg(a, p => p.pharmWaitTime), 0, 1)}${cell(avg(a, p => p.standingTime), 0, 0)}<td class="tot">${tot == null ? '–' : tot.toFixed(1)} <span class="n">(${fin.length} done)</span></td></tr>`;
+      };
+      const person = (name, sim, id) => {
+        const p = id == null ? null : sim.patients.find(q => q.id === id);
+        const lbl = `${name} — ${sim.mode === 'current' ? 'today' : 'proposed'}`;
+        if (!p || p.state === 'NOT_ARRIVED') return `<tr><td>${lbl}</td><td class="na" colspan="7">not arrived yet${p ? ' (' + formatClock(p.arrivalTime) + ')' : ''}</td></tr>`;
+        const kind = sim.mode === 'current' ? 'walk' : p.isAppt ? 'booked' : p.hasPin ? 'pin' : 'walk';
+        const skReg = kind === 'booked' || kind === 'pin', skTri = sim.mode === 'current' || (kind === 'booked' && !viaTriage);
+        const tot = p.completionTime != null ? (p.completionTime - p.arrivalTime).toFixed(1) : 'in progress';
+        const tag = sim.mode === 'current' ? 'walk-in' : kind === 'booked' ? 'booked' + (p.tokenLabel ? ' ' + p.tokenLabel : '') : (kind === 'pin' ? 'walk-in, PIN' : 'walk-in, no PIN') + (p.tokenLabel ? ' ' + p.tokenLabel : '');
+        return `<tr><td>${lbl} <span class="n">${tag}, arr ${formatClock(p.arrivalTime)}</span></td>${cell(p.regWaitTime, skReg, 1)}${cell(p.triageWaitTime || 0, skTri, 1)}${cell(p.vitalsWaitTime, 0, 1)}${cell(p.consultWaitTime, 0, 1)}${cell(p.pharmWaitTime, 0, 1)}${cell(p.standingTime, 0, 0)}<td class="tot">${tot}</td></tr>`;
+      };
+      const arr = sim => sim.patients.filter(p => p.state !== 'NOT_ARRIVED');
+      const c = arr(simCurrent), p = arr(simProposed);
+      const w = p.filter(x => !x.isAppt);
+      body.innerHTML =
+        '<tr class="grp c"><td colspan="8">Today</td></tr>' + row('Everyone (all walk-in)', c, 'current', 'walk') +
+        '<tr class="grp p"><td colspan="8">Proposed</td></tr>' +
+        row('Booked', p.filter(x => x.isAppt), 'proposed', 'booked') +
+        row('Walk-in with PIN', w.filter(x => x.hasPin), 'proposed', 'pin') +
+        row('Walk-in without PIN', w.filter(x => !x.hasPin), 'proposed', 'walk') +
+        row('All proposed', p, 'proposed', 'mixed').replace(/<td class="na">skipped<\/td>/g, '<td class="na">–</td>') +
+        '<tr class="grp k"><td colspan="8">Anitha &amp; Jeevan</td></tr>' +
+        person('Anitha', simCurrent, defaultFollowId) + person('Anitha', simProposed, defaultFollowId) +
+        person('Jeevan', simCurrent, jeevanId) + person('Jeevan', simProposed, jeevanId);
+    }
     function updateDashboardUI() {
+      renderWaitTable();
       // Clock & Phase
       document.getElementById('clockDisplay').textContent = formatClock(simTime);
       const pct = Math.min(100, Math.round((simTime / SIM_DURATION_MAX) * 100));
@@ -1432,7 +1488,7 @@
     }
 
     function resetSimulations() {
-      simTime = 0;
+      simTime = 0; tickN = 0; tickAcc = 0;
       simCurrent.reset();
       simProposed.reset();
       pickDefaultFollow(); defaultFollowId = followId; pickJeevan(); milestoneShown = -1;
@@ -1466,11 +1522,7 @@
     // Step +10 simulated minutes
     document.getElementById('btnStep').addEventListener('click', () => {
       const target = Math.min(SIM_DURATION_MAX, simTime + 10);
-      while (simTime < target) {
-        simTime += 0.2;
-        simCurrent.step(0.2);
-        simProposed.step(0.2);
-      }
+      while (simTime < target - 1e-9) tickFixed();
       updateDashboardUI();
       drawFloorplan(ctxCur, simCurrent, false);
       drawFloorplan(ctxProp, simProposed, true);
@@ -1572,23 +1624,17 @@
       resetSimulations();
     });
 
+    const TICK = 0.1; let tickN = 0, tickAcc = 0;
+    function tickFixed() { tickN++; simTime = tickN * TICK; simCurrent.step(TICK); simProposed.step(TICK); }
     function animateLoop(now) {
       const elapsedSec = Math.min(0.1, (now - lastFrameTime) / 1000);
       lastFrameTime = now;
 
       if (isRunning && simTime < SIM_DURATION_MAX) {
         // Advance simulation time based on speed multiplier
-        const totalSimDelta = elapsedSec * 3.2 * simSpeed;
-        const subSteps = Math.max(1, Math.ceil(totalSimDelta / 0.15));
-        const subDt = totalSimDelta / subSteps;
-
-        for (let i = 0; i < subSteps; i++) {
-          if (simTime < SIM_DURATION_MAX) {
-            simTime += subDt;
-            simCurrent.step(subDt);
-            simProposed.step(subDt);
-          }
-        }
+        // Fixed 0.1-min ticks: results identical at any speed / frame rate
+        tickAcc += elapsedSec * 3.2 * simSpeed;
+        while (tickAcc >= TICK && simTime < SIM_DURATION_MAX - 1e-9) { tickAcc -= TICK; tickFixed(); }
         updateDashboardUI();
       }
 
