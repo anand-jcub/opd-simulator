@@ -97,27 +97,54 @@
   .pol{padding:0 12px 10px;font-size:var(--s);display:flex;flex-direction:column;gap:3px}
   @media (max-width:1100px){.follow{grid-template-columns:1fr}}
   @media (max-width:1100px){.lower{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+
+  /* ---------- v7 presentation layer ---------- */
+  .wrap{padding:10px 20px 40px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:2px 0 8px;border-bottom:1px solid var(--line)}
+  .brand{font-size:var(--s);font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+  .topbar .transport{gap:8px}
+  .topbar .t{font-size:var(--m);font-weight:600;min-width:72px}
+  .topbar .prog{width:90px}
+  .topbar button{padding:4px 10px}
+  .topbar .seg button{padding:4px 8px}
+  button.primary{background:var(--text);color:#fff;border-color:var(--text);min-width:64px}
+  h1#headline{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:16px 0 10px;line-height:1.25}
+  .nums{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;gap:12px 64px;margin:0 0 14px}
+  .nums .lbl{font-size:var(--s);color:var(--muted)}
+  .nums .vals{font-size:var(--l);font-weight:600;display:flex;align-items:baseline;gap:10px}
+  .nums .c{color:var(--cur)} .nums .p{color:var(--prop)} .nums .arrow{color:#b8bec6;font-weight:400}
+  .nums .delta{margin-top:0}
+  .plan{background:transparent;border:0;padding:0}
+  .plan.cur,.plan.prop{border-top:0}
+  .plans{margin:0 0 4px;gap:14px}
+  .plan-h{padding:0 2px 6px}
+  .plan.cur .ttl{color:var(--cur)} .plan.prop .ttl{color:var(--prop)}
+  .plan-h .ttl{font-size:var(--m)}
+  canvas{border-radius:8px}
+  .story{margin:6px 2px 0;min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+  .fline{font-size:var(--s);color:var(--muted);margin:2px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .legend{margin:10px 2px 4px;gap:22px}
+  .lesson{background:none;border:0;padding:0 2px;margin:0 0 18px;color:var(--text);font-size:var(--m);min-height:1.5em}
+  details.more{margin-top:18px;border-top:1px solid var(--line)}
+  details.more>summary{padding:14px 2px;font-weight:600;font-size:var(--m)}
+  details.more .lower{margin-top:4px}
+  details.more .card{border-color:#eceef1}
+  .sect{padding:12px 2px;font-size:var(--s);color:var(--muted)}
+  .sect h2{font-size:var(--m);color:var(--text);margin:0 0 8px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <h1>OPD Queue Simulator</h1>
-      <div class="sub">Current walk-in queues vs. proposed appointments + vitals tokens · same patients, same staff</div>
-    </div>
+  <div class="topbar">
+    <div class="brand">OPD Queue Simulator</div>
     <div class="transport">
-      <div class="clock">
-        <span id="simStatusDot"></span>
-        <span id="clockDisplay" class="t num">07:30 AM</span>
-        <div>
-          <div class="prog"><div id="clockProgressBar"></div></div>
-          <div class="small muted"><span id="phaseBadge">Morning surge</span> · <span id="progressPctLabel" class="num">0%</span></div>
-        </div>
-      </div>
-      <button id="btnPlayPause"><span id="playPauseIcon"></span><span id="playPauseText">Pause</span></button>
+      <span id="simStatusDot"></span>
+      <span id="clockDisplay" class="t num">07:30 AM</span>
+      <div class="prog" title="Morning progress"><div id="clockProgressBar"></div></div>
+      <span class="hidden"><span id="phaseBadge"></span><span id="progressPctLabel"></span></span>
+      <button id="btnPlayPause" class="primary"><span id="playPauseIcon"></span><span id="playPauseText">Pause</span></button>
       <button id="btnStep">+10 min</button>
-      <button id="btnReset">Reset</button>
+      <button id="btnReset">Restart</button>
       <div class="seg">
         <button data-speed="1" class="speed-btn">1×</button>
         <button data-speed="2" class="speed-btn active">2×</button>
@@ -125,57 +152,53 @@
         <button data-speed="10" class="speed-btn">10×</button>
       </div>
     </div>
-  </header>
+  </div>
 
-  <section class="kpis">
-    <div class="card kpi"><div class="label">Avg. time standing in queues</div>
-      <div class="row"><div><div class="tag"><span class="dot d-cur"></span>Current</div><div id="kpiStandCur" class="v num">0.0m</div></div>
-      <div><div class="tag"><span class="dot d-prop"></span>Proposed</div><div id="kpiStandProp" class="v num">0.0m</div></div></div>
+  <h1 id="headline">Same patients, same staff — two ways to run the morning OPD</h1>
+
+  <section class="nums">
+    <div class="n"><div class="lbl">Time standing in queues</div>
+      <div class="vals num"><span class="c" id="kpiStandCur">0m</span><span class="arrow">→</span><span class="p" id="kpiStandProp">0m</span></div>
       <div id="dStand" class="delta">&nbsp;</div></div>
-    <div class="card kpi"><div class="label">Avg. registration wait (walk-ins)</div>
-      <div class="row"><div><div class="tag"><span class="dot d-cur"></span>Current</div><div id="kpiRegWaitCur" class="v num">0.0m</div></div>
-      <div><div class="tag"><span class="dot d-prop"></span>Proposed</div><div id="kpiRegWaitProp" class="v num">0.0m</div></div></div>
+    <div class="n"><div class="lbl">Registration wait (walk-ins)</div>
+      <div class="vals num"><span class="c" id="kpiRegWaitCur">0m</span><span class="arrow">→</span><span class="p" id="kpiRegWaitProp">0m</span></div>
       <div id="dReg" class="delta">&nbsp;</div></div>
-    <div class="card kpi"><div class="label">Avg. consultation wait</div>
-      <div class="row"><div><div class="tag"><span class="dot d-cur"></span>Current</div><div id="kpiConWaitCur" class="v num">0.0m</div></div>
-      <div><div class="tag"><span class="dot d-prop"></span>Proposed</div><div id="kpiConWaitProp" class="v num">0.0m</div></div></div>
-      <div id="dCon" class="delta">&nbsp;</div></div>
-    <div class="card kpi"><div class="label">Avg. total OPD time (arrival → exit)</div>
-      <div class="row"><div><div class="tag"><span class="dot d-cur"></span>Current</div><div id="kpiTatCur" class="v num">0.0m</div></div>
-      <div><div class="tag"><span class="dot d-prop"></span>Proposed</div><div id="kpiTatProp" class="v num">0.0m</div></div></div>
+    <div class="n"><div class="lbl">Total time in the OPD</div>
+      <div class="vals num"><span class="c" id="kpiTatCur">0m</span><span class="arrow">→</span><span class="p" id="kpiTatProp">0m</span></div>
       <div id="dTat" class="delta">&nbsp;</div></div>
   </section>
 
   <section class="plans">
-    <div class="card plan cur">
-      <div class="plan-h"><div class="ttl"><span class="dot d-cur"></span>Current · all walk-in</div>
-        <div class="small muted num">In OPD <span id="curActiveCount">0</span> · Done <span id="curDoneCount">0</span></div></div>
+    <div class="plan cur">
+      <div class="plan-h"><div class="ttl">Today: everyone walks in</div>
+        <div class="small muted num">in OPD <span id="curActiveCount">0</span> · done <span id="curDoneCount">0</span></div></div>
       <canvas id="canvasCurrent" width="760" height="470"></canvas>
       <p id="storyCur" class="story"></p>
-      <div class="qline num hidden">Queues — Registration <span id="curQReg">0</span> · Vitals <span id="curQVitals">0</span> · Consultation <span id="curQConsult">0</span> · Pharmacy <span id="curQPharm">0</span></div>
+      <p id="followCur" class="fline"></p>
     </div>
-    <div class="card plan prop">
-      <div class="plan-h"><div class="ttl"><span class="dot d-prop"></span>Proposed · <span id="proposedBannerSplit">50% Appt / 50% Walk-In</span></div>
-        <div class="small muted num">In OPD <span id="propActiveCount">0</span> · Done <span id="propDoneCount">0</span></div></div>
+    <div class="plan prop">
+      <div class="plan-h"><div class="ttl">Proposed: <span id="proposedBannerSplit">50% Appt / 50% Walk-In</span> · tokens at vitals</div>
+        <div class="small muted num">in OPD <span id="propActiveCount">0</span> · done <span id="propDoneCount">0</span></div></div>
       <canvas id="canvasProposed" width="760" height="470"></canvas>
       <p id="storyProp" class="story"></p>
-      <div class="qline num hidden">Queues — Registration <span id="propQReg">0</span> · Vitals <span id="propQVitals">0</span> · Consultation <span id="propQConsult">0</span> · Pharmacy <span id="propQPharm">0</span></div>
+      <p id="followProp" class="fline"></p>
     </div>
   </section>
   <div class="legend">
-    <span><span class="dot d-appt"></span> Appointment patient</span>
-    <span><span class="dot d-walk"></span> Walk-in patient</span>
-    <span>#A12 = token issued at vitals</span>
-    <span><span class="ring"></span> Followed patient · click any dot to follow them</span>
-    <span id="agentInspector">Hover a patient to inspect.</span>
+    <span><span class="dot d-appt"></span> Booked</span>
+    <span><span class="dot d-walk"></span> Walk-in</span>
+    <span><span class="ring"></span> <span id="followName">Anitha</span> — click any dot to follow someone else</span>
   </div>
   <p id="lesson" class="lesson" aria-live="polite"></p>
-  <section class="card follow">
-    <div class="fh"><span class="ring"></span><b id="followName">Anitha</b> <span id="followMeta" class="small muted"></span></div>
-    <div class="fc"><div class="tag"><span class="dot d-cur"></span>Current</div><div id="followCur" class="small"></div></div>
-    <div class="fc"><div class="tag"><span class="dot d-prop"></span>Proposed</div><div id="followProp" class="small"></div></div>
-  </section>
+  <div class="hidden">
+    <span id="followMeta"></span><span id="agentInspector"></span>
+    <span id="curQReg"></span><span id="curQVitals"></span><span id="curQConsult"></span><span id="curQPharm"></span>
+    <span id="propQReg"></span><span id="propQVitals"></span><span id="propQConsult"></span><span id="propQPharm"></span>
+    <span id="kpiConWaitCur"></span><span id="kpiConWaitProp"></span><span id="dCon"></span>
+  </div>
 
+  <details class="more">
+    <summary>Try changes &amp; details</summary>
   <section class="lower">
     <div class="card panel">
       <h2>Scenario</h2>
@@ -241,8 +264,7 @@
     </div>
   </section>
 
-  <details class="card">
-    <summary>More statistics</summary>
+  <div class="sect"><h2>More statistics</h2>
     <div class="body stats num">
       <div>Peak registration queue · current <b id="kpiRegPeakCur">0</b></div>
       <div>Peak registration queue · proposed <b id="kpiRegPeakProp">0</b></div>
@@ -258,15 +280,15 @@
       <div>Friction index · proposed <b id="kpiFrictionIndexProp">0</b></div>
     </div>
     <span id="kpiStandSaving" class="hidden"></span><span id="kpiTatDiff" class="hidden"></span>
-  </details>
+  </div>
 
-  <details class="card">
-    <summary>How it works</summary>
+  <div class="sect"><h2>How it works</h2>
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (2 counters), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
       <p><b>Proposed:</b> the chosen share of patients book a time slot (07:40–11:30) and go straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately and issues a token number. Patients then wait seated and are called to consultation in token order.</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
     </div>
+  </div>
   </details>
 </div>
 
@@ -1180,12 +1202,13 @@
     };
     function describeFollow(sim) {
       const p = sim.patients.find(q => q.id === followId);
-      if (!p) return '—';
+      if (!p) return '';
       let st = STAGE_TEXT[p.state] || p.state;
       if (p.state === 'SEATED_TOKEN_LOUNGE' && p.tokenLabel) st = `seated with token ${p.tokenLabel}`;
       if (p.state === 'NOT_ARRIVED' && p.isAppt) st = `at home, booked for ${formatClock(p.slotTime)}`;
-      const total = p.completionTime ? ` · total ${Math.round(p.completionTime - p.arrivalTime)} min` : '';
-      return `<b>${st}</b><br><span class="muted">Waited: registration ${p.regWaitTime.toFixed(0)} · vitals ${p.vitalsWaitTime.toFixed(0)} · doctor ${p.consultWaitTime.toFixed(0)} · pharmacy ${p.pharmWaitTime.toFixed(0)} min${total}</span>`;
+      if (p.state === 'COMPLETED') return `${followName}: done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} min of it standing).`;
+      if (p.state === 'NOT_ARRIVED') return `${followName}: ${st}.`;
+      return `${followName}: ${st} · ${Math.round(simTime - p.arrivalTime)} min in the OPD, ${Math.round(p.standingTime)} of them standing.`;
     }
     function nearestPatient(e, sim, canvasEl) {
       const rect = canvasEl.getBoundingClientRect();
@@ -1212,39 +1235,50 @@
     // ---------- Plain-language story + lesson ----------
     let lastLessonAt = -999, lastLesson = '';
     function sumQ(sim, key) { return sim.deptState[0][key].length + sim.deptState[1][key].length; }
+    const plural = (n, one, many) => `${n === 0 ? 'no' : n} ${n === 1 ? one : many}`;
+    let milestoneShown = -1;
     function updateStoryUI(force) {
       const c = simCurrent, p = simProposed;
       const cReg = c.regQueue.length, pReg = p.regQueue.length;
-      const cVit = sumQ(c, 'vitalsQueueSingle'), pVa = sumQ(p, 'vitalsQueueAppt'), pVw = sumQ(p, 'vitalsQueueWalk');
+      const cVit = sumQ(c, 'vitalsQueueSingle'), pVit = sumQ(p, 'vitalsQueueAppt') + sumQ(p, 'vitalsQueueWalk');
       const cCon = sumQ(c, 'consultQueue'), pCon = sumQ(p, 'consultQueue');
-      const cPh = c.pharmQueue.length, pPh = p.pharmQueue.length;
       const atHome = p.patients.filter(q => q.state === 'NOT_ARRIVED' && q.isAppt).length;
-      const clock = formatClock(simTime);
+      const cStand = cReg + cVit + cCon + c.pharmQueue.length;
+      const pStand = pReg + pVit + p.pharmQueue.length;
+      const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       document.getElementById('storyCur').textContent =
-        `${clock}. ${cReg} standing at registration, ${cVit} standing at vitals, ${cCon} standing at the doctors' doors with no number, ${cPh} in the pharmacy line.`;
+        `${cap(plural(cStand, 'person', 'people'))} standing in lines` + (cCon ? `, ${cCon} of them crowding the doctors' doors.` : '.');
       document.getElementById('storyProp').textContent =
-        `${clock}. ${atHome} booked patients still at home. ${pReg} walk-ins at registration, ${pVa} booked + ${pVw} walk-in at vitals, ${pCon} seated with a token, ${pPh} in the pharmacy line.`;
+        `${cap(plural(pStand, 'person', 'people'))} standing, ${pCon} seated with a token` + (atHome ? `, ${atHome} booked still at home.` : '.');
       document.getElementById('followName').textContent = followName;
-      const fp = p.patients.find(q => q.id === followId);
-      document.getElementById('followMeta').textContent = fp ? `${fp.isAppt ? 'booked on the right, walk-in on the left' : 'walk-in on both sides'} · Dept ${fp.deptId === 0 ? 'A' : 'B'}` : '';
-      document.getElementById('followCur').innerHTML = describeFollow(c);
-      document.getElementById('followProp').innerHTML = describeFollow(p);
+      document.getElementById('followCur').textContent = describeFollow(c);
+      document.getElementById('followProp').textContent = describeFollow(p);
 
-      let lesson;
+      // Headline (live once the morning is under way)
+      const sc = computeStats(c), sp = computeStats(p);
+      if (simTime > 30 && sc.avgStanding > 1) {
+        const pct = Math.round((1 - sp.avgStanding / sc.avgStanding) * 100);
+        document.getElementById('headline').textContent = pct >= 0
+          ? `Same patients, same staff: time spent standing in queues drops ${pct}%`
+          : `Same patients, same staff: time spent standing in queues rises ${-pct}%`;
+      } else if (simTime === 0) {
+        document.getElementById('headline').textContent = 'Same patients, same staff — two ways to run the morning OPD';
+      }
+
+      // Lesson only at milestones
       const allDone = c.completedPatients.length === c.patients.length && p.completedPatients.length === p.patients.length;
-      if (simTime < 5) lesson = 'The morning starts. Walk-ins arrive in an early surge on both sides; booked patients will come at their slot times.';
-      else if (allDone || simTime >= SIM_DURATION_MAX) {
-        const sc = computeStats(c), sp = computeStats(p);
-        lesson = `Morning over. Average time in the OPD: ${sc.avgTat.toFixed(0)} min today vs ${sp.avgTat.toFixed(0)} min proposed; time standing in lines ${sc.avgStanding.toFixed(0)} vs ${sp.avgStanding.toFixed(0)} min.`;
-      } else if (cReg >= 10 && pReg <= cReg / 2) lesson = `A queue is building at registration: ${cReg} people standing on the left. On the right booked patients skip it, so only ${pReg} walk-ins are in line.`;
-      else if (cCon >= 8 && pCon >= 4) lesson = `At the doctors: ${cCon} people stand at the door with no number on the left. On the right ${pCon} are seated holding a token issued at vitals and wait to be called.`;
-      else if (pVw > pVa + 5 && params.vitalsPolicy === 'apptFirst') lesson = `The vitals nurse is calling booked patients first, so ${pVw} walk-ins are waiting in their lane.`;
-      else if (Math.max(cPh, pPh) >= 6) lesson = `The pharmacy is the slow step now: ${cPh} waiting on the left and ${pPh} on the right. Booking does not add a counter.`;
-      else if (pVa + pVw > cVit + 4) lesson = `Vitals is busier on the right: booked arrivals and walk-ins meet at the same nurse (${pVa} booked, ${pVw} walk-in waiting).`;
-      else lesson = `Patients are moving steadily. Left: ${cReg + cVit + cCon + cPh} waiting in lines. Right: ${pReg + pVa + pVw + pPh} in lines and ${pCon} seated.`;
-      const now = performance.now();
-      if (lesson !== lastLesson && (force || now - lastLessonAt > 4000)) {
-        document.getElementById('lesson').textContent = lesson; lastLesson = lesson; lastLessonAt = now;
+      const ms = (allDone || simTime >= SIM_DURATION_MAX) ? 4 : simTime >= 180 ? 3 : simTime >= 75 ? 2 : simTime >= 30 ? 1 : 0;
+      if (ms !== milestoneShown || force) {
+        let lesson = '';
+        if (ms === 0) lesson = 'Walk-ins arrive in an early surge. Booked patients come later, at their slot times.';
+        else if (ms === 1) lesson = pReg === 0
+          ? `Registration: ${cReg} standing on the left; on the right, booked patients skip it and nobody is waiting.`
+          : `Registration: ${cReg} standing on the left; on the right, booked patients skip it, leaving ${plural(pReg, 'walk-in', 'walk-ins')} in line.`;
+        else if (ms === 2) lesson = `At the doctors: on the left people stand at the door with no number; on the right they sit with a token and are called in order.`;
+        else if (ms === 3) lesson = `Late morning: ${plural(cCon, 'person', 'people')} still waiting for a doctor on the left (standing), ${pCon} on the right (seated). Booking changes where people wait, not how many doctors there are.`;
+        else lesson = `Morning over. Average total time ${sc.avgTat.toFixed(0)} min today vs ${sp.avgTat.toFixed(0)} min proposed; standing ${sc.avgStanding.toFixed(0)} vs ${sp.avgStanding.toFixed(0)} min.`;
+        document.getElementById('lesson').textContent = lesson;
+        milestoneShown = ms;
       }
     }
 
@@ -1252,7 +1286,7 @@
       simTime = 0;
       simCurrent.reset();
       simProposed.reset();
-      pickDefaultFollow(); defaultFollowId = followId; lastLesson = '';
+      pickDefaultFollow(); defaultFollowId = followId; milestoneShown = -1;
       updateDashboardUI();
       drawFloorplan(ctxCur, simCurrent, false);
       drawFloorplan(ctxProp, simProposed, true);
