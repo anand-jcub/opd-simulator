@@ -131,7 +131,7 @@
   .lesson{background:none;border:0;padding:0 2px;margin:0 0 18px;color:var(--text);font-size:var(--m);min-height:1.5em}
   details.more{margin-top:18px;border-top:1px solid var(--line)}
   details.more>summary{padding:14px 2px;font-weight:600;font-size:var(--m)}
-  details.more .lower{margin-top:4px}
+  details.more .lower{margin-top:4px;grid-template-columns:1fr}
   details.more .card{border-color:#eceef1}
   .sect{padding:12px 2px;font-size:var(--s);color:var(--muted)}
   .sect h2{font-size:var(--m);color:var(--text);margin:0 0 8px}
@@ -170,7 +170,7 @@
 
   <h1 id="headline">Same patients, same staff — two ways to run the morning OPD</h1>
 
-  <section class="nums">
+  <section class="nums" style="display:none" aria-hidden="true">
     <div class="n"><div class="lbl">Time standing in queues</div>
       <div class="vals num"><span class="c" id="kpiStandCur">0m</span><span class="arrow">→</span><span class="p" id="kpiStandProp">0m</span></div>
       <div id="dStand" class="delta">&nbsp;</div></div>
@@ -261,7 +261,7 @@
       </details>
       <p class="small muted" style="margin:12px 0 0">Service times are per patient. Changing share, volume, staff or policy restarts the morning.</p>
     </div>
-    <div class="card panel">
+    <div class="card panel" style="display:none" aria-hidden="true">
       <h2>Average wait by stage</h2>
       <div class="stage"><div class="nm">Registration</div>
         <div class="bar"><div id="barRegCur" class="b-cur"></div></div><div id="barLblRegCur" class="val num">0m</div>
@@ -292,10 +292,10 @@
       <div>Peak standing crowd at consult · current <b id="kpiConsultCrowdCur">0</b></div>
       <div>Standing crowd at consult · proposed <b id="kpiConsultCrowdProp">0</b></div>
       <div>Avg. seated token wait · proposed <b id="kpiSeatedWaitProp">0</b></div>
-      <div>Standing time · proposed appt <b id="kpiStandPropAppt">0</b></div>
-      <div>Standing time · proposed walk-in <b id="kpiStandPropWalk">0</b></div>
-      <div>Total OPD time · proposed appt <b id="kpiTatPropAppt">0</b></div>
-      <div>Total OPD time · proposed walk-in <b id="kpiTatPropWalk">0</b></div>
+      <div style="display:none">Standing time · proposed appt <b id="kpiStandPropAppt">0</b></div>
+      <div style="display:none">Standing time · proposed walk-in <b id="kpiStandPropWalk">0</b></div>
+      <div style="display:none">Total OPD time · proposed appt <b id="kpiTatPropAppt">0</b></div>
+      <div style="display:none">Total OPD time · proposed walk-in <b id="kpiTatPropWalk">0</b></div>
       <div>Friction index · current <b id="kpiFrictionIndexCur">0</b></div>
       <div>Friction index · proposed <b id="kpiFrictionIndexProp">0</b></div>
     </div>
@@ -1380,9 +1380,7 @@
       if (p.state === 'SEATED_TOKEN_LOUNGE' && p.tokenLabel) st = `seated with token ${p.tokenLabel}`;
       if (p.state === 'NOT_ARRIVED' && p.isAppt) st = `at home, booked for ${formatClock(p.slotTime)}`;
       if (sim.mode === 'proposed' && !p.isAppt && p.state === 'NOT_ARRIVED') return `${followName}: not here yet${p.hasPin ? ' (has a PIN)' : ''}.`;
-      if (p.state === 'COMPLETED') return `${followName}: done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} min of it standing).`;
-      if (p.state === 'NOT_ARRIVED') return `${followName}: ${st}.`;
-      return `${followName}: ${st} · ${Math.round(simTime - p.arrivalTime)} min in the OPD, ${Math.round(p.standingTime)} of them standing.`;
+      return `${followName}: ${st}.`;
     }
     function nearestPatient(e, sim, canvasEl) {
       const rect = canvasEl.getBoundingClientRect();
@@ -1419,7 +1417,7 @@
       const how = p.isAppt ? `slot ${formatClock(p.slotTime)} → ${tok}` : `walked in ${formatClock(p.arrivalTime)}`;
       if (p.state === 'NOT_ARRIVED') return p.isAppt ? `at home · token ${tok} reserved, slot ${formatClock(p.slotTime)}, arrives ${formatClock(p.arrivalTime)}` : `not here yet (walks in at ${formatClock(p.arrivalTime)})`;
       if (p.isAppt && p.state === 'SEATED_TOKEN_LOUNGE') return `${how} · seated (now ${sim.deptState[p.deptId].nowServingToken})`;
-      if (p.state === 'COMPLETED') return `${how} · done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} standing)`;
+      if (p.state === 'COMPLETED') return `${how} · finished and gone home`;
       let st = STAGE_TEXT[p.state] || p.state;
       if (p.state === 'SEATED_TOKEN_LOUNGE' && p.tokenLabel) st = `seated with token ${p.tokenLabel}`;
       return `${how} · ${st}`;
@@ -1477,11 +1475,7 @@
           : `Registration: ${cReg} standing on the left; on the right, booked patients skip it, leaving ${plural(pReg, 'walk-in', 'walk-ins')} in line.`;
         else if (ms === 2) lesson = `At the doctors: on the left people stand at the door with no number; on the right they sit with a token and are called in order.`;
         else if (ms === 3) lesson = `Late morning: ${plural(cCon, 'person', 'people')} still waiting for a doctor on the left (standing), ${pCon} on the right (seated). Booking changes where people wait, not how many doctors there are.`;
-        else lesson = `Morning over. Average total time ${sc.avgTat.toFixed(0)} min today vs ${sp.avgTat.toFixed(0)} min proposed; standing ${sc.avgStanding.toFixed(0)} vs ${sp.avgStanding.toFixed(0)} min.`;
-        if (ms === 4) {
-          const jc = c.patients.find(q => q.id === jeevanId), jp = p.patients.find(q => q.id === jeevanId);
-          if (jc && jp && jc.completionTime && jp.completionTime) lesson += ` Jeevan: ${Math.round(jc.completionTime - jc.arrivalTime)} min in the OPD (${Math.round(jc.standingTime)} standing) when he walked in, ${Math.round(jp.completionTime - jp.arrivalTime)} min (${Math.round(jp.standingTime)} standing) after booking.`;
-        }
+        else lesson = 'Morning over. The table below shows the final wait at each checkpoint, including Anitha and Jeevan.';
         document.getElementById('lesson').textContent = lesson;
         milestoneShown = ms;
       }
