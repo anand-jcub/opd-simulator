@@ -239,9 +239,7 @@
           <label><input type="radio" name="vitalsPolicy" value="alternate" checked> Take turns between lanes</label>
           <label><input type="radio" name="vitalsPolicy" value="apptFirst"> Appointment lane first</label>
           <label><input type="radio" name="vitalsPolicy" value="walkFirst"> Walk-in lane first</label></div>
-        <div class="pol"><div class="small"><b>Doctor</b></div>
-          <label><input type="radio" name="doctorPolicy" value="token" checked> Call tokens in order</label>
-          <label><input type="radio" name="doctorPolicy" value="hold"> Keep booked times, walk-ins in the gaps</label></div>
+        <p class="small muted" style="margin:6px 0 0">Doctors have no calling choice: tokens are called strictly in number order.</p>
       </details>
       <p class="small muted" style="margin:12px 0 0">Service times are per patient. Changing share, volume, staff or policy restarts the morning.</p>
     </div>
@@ -289,7 +287,7 @@
   <div class="sect"><h2>How it works</h2>
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (2 counters), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
-      <p><b>Proposed:</b> the chosen share of patients book a time slot (07:40–11:30) and go straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately and issues a token number. Patients then wait seated and are called to consultation in token order.</p>
+      <p><b>Proposed:</b> the chosen share of patients book a time slot (07:40–11:30) and go straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token numbers are pre-allocated to consultation slots (slot length = consultation time ÷ doctors, counted from 07:30): a booked patient holds the token of his slot; walk-ins get the remaining numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
     </div>
   </div>
@@ -343,8 +341,7 @@
       doctorsPerDept: 2,      // doctors per department
       pharmCounters: 2,       // pharmacy counters
       // Calling policies (proposed system)
-      vitalsPolicy: 'alternate', // 'alternate' | 'apptFirst' | 'walkFirst'
-      doctorPolicy: 'token'      // 'token' | 'hold'
+      vitalsPolicy: 'alternate'  // 'alternate' | 'apptFirst' | 'walkFirst'
     };
 
     // Playback state
@@ -447,7 +444,7 @@
           vitalsQueueWalk: [],   // Used in 'proposed'
           vitalsServers: new Array(params.vitalsNurses).fill(null), // vitals nurses per dept
           lastServedAppt: false, // Alternates fairly between Appt and Walk-in at Vitals
-          nextTokenNum: 1,       // Sequential token issued at Vitals completion (#A1, #A2...)
+          nextTokenNum: 1,       // (unused since v9: see assignReservedTokens)
           nowServingToken: '--', // Token displayed on digital board outside Consultation Room
           // Consultation queues / lounge
           consultQueue: [],      // In 'current': physical standing queue; In 'proposed': token-ordered seated lounge
@@ -464,6 +461,7 @@
         this.bypassedRegCount = 0;
 
         this.generateSchedule();
+        this.assignReservedTokens();
       }
 
       generateSchedule() {
@@ -517,7 +515,7 @@
           this.patients.push({
             id: i + 1,
             isAppt: exactAppt,
-            slotTime: exactAppt ? arrivalTime : null, // booked arrival time (used by 'hold' doctor policy)
+            slotTime: exactAppt ? arrivalTime : null, // booked slot time (arrives on time)
             deptId,
             arrivalTime,
             regFactor,
@@ -548,6 +546,25 @@
 
         // Sort by arrival time
         this.patients.sort((a, b) => a.arrivalTime - b.arrivalTime);
+      }
+
+      // Pre-programmed slot-token scheme (proposed): each dept's session (from 07:30) is divided into
+      // consultation slots of length L = consult time / doctors. Token k belongs to slot k (starts at (k-1)*L).
+      // Booked patients get the token of their slot (next free number if two land in one slot);
+      // walk-ins receive the lowest unreserved numbers in the order they finish vitals.
+      assignReservedTokens() {
+        const L = (params.consultServiceTime * 2.0) / params.doctorsPerDept;
+        this.slotLen = L;
+        for (const dept of this.deptState) { dept.reserved = new Set(); dept.nextWalkToken = 1; }
+        if (this.mode !== 'proposed') return;
+        const booked = this.patients.filter(p => p.isAppt).sort((a, b) => a.slotTime - b.slotTime || a.id - b.id);
+        for (const p of booked) {
+          const dept = this.deptState[p.deptId];
+          let k = Math.max(1, Math.floor(p.slotTime / L) + 1);
+          while (dept.reserved.has(k)) k++;
+          dept.reserved.add(k);
+          p.reservedToken = k;
+        }
       }
 
       step(dt) {
@@ -623,7 +640,12 @@
               if (activeP.serviceRemaining <= 0) {
                 if (this.mode === 'proposed') {
                   // Issue sequential Token Number from Vitals
-                  activeP.tokenNum = dept.nextTokenNum++;
+                  if (activeP.isAppt) {
+                    activeP.tokenNum = activeP.reservedToken;
+                  } else {
+                    while (dept.reserved.has(dept.nextWalkToken)) dept.nextWalkToken++;
+                    activeP.tokenNum = dept.nextWalkToken++;
+                  }
                   activeP.tokenLabel = `#${dept.prefix}${activeP.tokenNum}`;
                   activeP.state = 'SEATED_TOKEN_LOUNGE';
                 } else {
@@ -683,18 +705,10 @@
               if (this.mode === 'proposed') {
                 dept.consultQueue.sort((a, b) => (a.tokenNum || 9999) - (b.tokenNum || 9999));
               }
-              let pick = 0;
-              if (this.mode === 'proposed' && params.doctorPolicy === 'hold') {
-                // Keep booked times: a booked patient whose slot is due goes first (earliest slot);
-                // otherwise see a walk-in in the gap; otherwise the lowest token.
-                const horizon = simTime + params.consultServiceTime * 2.0;
-                let bestSlot = Infinity, hold = -1, walk = -1;
-                dept.consultQueue.forEach((q, qi) => {
-                  if (q.isAppt) { if (q.slotTime <= horizon && q.slotTime < bestSlot) { bestSlot = q.slotTime; hold = qi; } }
-                  else if (walk < 0) walk = qi;
-                });
-                pick = hold >= 0 ? hold : walk >= 0 ? walk : 0;
-              }
+              // Strict token order among patients who are ready (vitals done, seated).
+              // A booked patient whose token comes up but who has not arrived / finished vitals is skipped;
+              // he holds the lowest number, so he is called first as soon as he is seated.
+              const pick = 0;
               const nextP = dept.consultQueue.splice(pick, 1)[0];
               nextP.state = 'SERVING_CONSULT';
               nextP.docIdx = docIdx;
@@ -1248,8 +1262,10 @@
     function describeJeevan(sim) {
       const p = sim.patients.find(q => q.id === jeevanId);
       if (!p) return '';
-      const how = p.isAppt ? `booked ${formatClock(p.slotTime)}` : `walked in ${formatClock(p.arrivalTime)}`;
-      if (p.state === 'NOT_ARRIVED') return p.isAppt ? `at home, booked for ${formatClock(p.slotTime)}` : `not here yet (walks in at ${formatClock(p.arrivalTime)})`;
+      const tok = p.isAppt ? `#${sim.deptState[p.deptId].prefix}${p.reservedToken}` : '';
+      const how = p.isAppt ? `booked ${formatClock(p.slotTime)} → ${tok}` : `walked in ${formatClock(p.arrivalTime)}`;
+      if (p.state === 'NOT_ARRIVED') return p.isAppt ? `at home · booked ${formatClock(p.slotTime)} → token ${tok} reserved` : `not here yet (walks in at ${formatClock(p.arrivalTime)})`;
+      if (p.isAppt && p.state === 'SEATED_TOKEN_LOUNGE') return `${how} · seated (now ${sim.deptState[p.deptId].nowServingToken})`;
       if (p.state === 'COMPLETED') return `${how} · done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} standing)`;
       let st = STAGE_TEXT[p.state] || p.state;
       if (p.state === 'SEATED_TOKEN_LOUNGE' && p.tokenLabel) st = `seated with token ${p.tokenLabel}`;
@@ -1409,7 +1425,7 @@
       }));
     });
     // Calling policies (restart the morning)
-    document.querySelectorAll('input[name=vitalsPolicy], input[name=doctorPolicy]').forEach(r => r.addEventListener('change', () => {
+    document.querySelectorAll('input[name=vitalsPolicy]').forEach(r => r.addEventListener('change', () => {
       params[r.name] = r.value; resetSimulations();
     }));
 
