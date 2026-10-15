@@ -131,7 +131,7 @@
   .lesson{background:none;border:0;padding:0 2px;margin:0 0 18px;color:var(--text);font-size:var(--m);min-height:1.5em}
   details.more{margin-top:18px;border-top:1px solid var(--line)}
   details.more>summary{padding:14px 2px;font-weight:600;font-size:var(--m)}
-  details.more .lower{margin-top:4px;grid-template-columns:1fr}
+  details.more .lower{margin-top:4px}
   details.more .card{border-color:#eceef1}
   .sect{padding:12px 2px;font-size:var(--s);color:var(--muted)}
   .sect h2{font-size:var(--m);color:var(--text);margin:0 0 8px}
@@ -261,7 +261,7 @@
       </details>
       <p class="small muted" style="margin:12px 0 0">Service times are per patient. Changing share, volume, staff or policy restarts the morning.</p>
     </div>
-    <div class="card panel" style="display:none" aria-hidden="true">
+    <div class="card panel">
       <h2>Average wait by stage</h2>
       <div class="stage"><div class="nm">Registration</div>
         <div class="bar"><div id="barRegCur" class="b-cur"></div></div><div id="barLblRegCur" class="val num">0m</div>
@@ -280,7 +280,7 @@
         <div class="bar"><div id="barPharmProp" class="b-prop"></div></div><div id="barLblPharmProp" class="val num">0m</div>
         <div></div><div></div></div>
       <div class="legend" style="margin:0"><span><span class="dot d-cur"></span> Current</span><span><span class="dot d-prop"></span> Proposed (walk-in / all)</span><span><span class="dot d-appt"></span> Proposed appointments</span></div>
-      <p id="executiveInsightText" class="insight">Live comparison appears once the simulation is running.</p>
+      <p id="executiveInsightText" class="insight" style="display:none">Live comparison appears once the simulation is running.</p>
     </div>
   </section>
 
