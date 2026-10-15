@@ -234,7 +234,7 @@
       </div>
       <h2 style="margin-top:16px">Staff (both systems)</h2>
       <div class="staff">
-        <div class="stepper" data-key="regCounters"><span>Registration counters</span><button data-d="-1" aria-label="fewer">−</button><output>2</output><button data-d="1" aria-label="more">+</button></div>
+        <div class="stepper" data-key="regCounters"><span>Registration counters</span><button data-d="-1" aria-label="fewer">−</button><output>1</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="vitalsNurses"><span>Vitals nurses / dept</span><button data-d="-1" aria-label="fewer">−</button><output>1</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="doctorsPerDept"><span>Doctors / dept</span><button data-d="-1" aria-label="fewer">−</button><output>2</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="triageCounters"><span>Triage counters (proposed)</span><button data-d="-1" aria-label="fewer">−</button><output>1</output><button data-d="1" aria-label="more">+</button></div>
@@ -294,8 +294,8 @@
 
   <div class="sect"><h2>How it works</h2>
     <div class="body">
-      <p><b>Current:</b> every patient walks in, stands in line at Registration (2 counters), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
-      <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Walk-ins with a valid PIN (slider, default 50%) skip Registration and go straight to the Triage counter; walk-ins without a PIN register first, then go to Triage. Triage (default 1 counter, 0.5 min) directs each walk-in to their department's Vitals. Booked patients go straight to Vitals (optionally via Triage). Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
+      <p><b>Current:</b> every patient walks in, stands in line at Registration (1 counter), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
+      <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Both systems have 1 registration counter by default. Walk-ins with a valid PIN (slider, default 50%) skip Registration and go straight to the Triage counter beside it; walk-ins without a PIN register first, then go to Triage. Triage (default 1 counter, 0.5 min) directs each walk-in to their department's Vitals. Booked patients go straight to Vitals (optionally via Triage). Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
     </div>
   </div>
@@ -339,12 +339,12 @@
     const params = {
       apptRatio: 0.50,        // 50% pre-booked appointments
       totalPatients: 160,     // Total morning patients
-      regServiceTime: 2.2,    // mins per patient at Registration (2 counters)
+      regServiceTime: 2.2,    // mins per patient at Registration
       vitalsServiceTime: 2.4, // mins per patient at Dept Vitals (1 station per Dept)
       consultServiceTime: 4.2,// mins per patient at Doctor Consultation (1 room per Dept, 2 docs per room)
       pharmServiceTime: 4.4,  // mins per patient at Pharmacy - realistic dispensing, forms a peak queue
       // Staffing (applies to both systems)
-      regCounters: 2,         // registration counters
+      regCounters: 1,         // registration counters (1 on both sides by default)
       vitalsNurses: 1,        // vitals nurses per department
       doctorsPerDept: 2,      // doctors per department
       pharmCounters: 2,       // pharmacy counters
@@ -432,7 +432,7 @@
     function counterY(idx, n) { if (n <= 1) return 235; const gap = Math.min(80, 200 / (n - 1)); return 235 + (idx - (n - 1) / 2) * gap; }
     function doctorY(roomY, idx, n) { return n <= 1 ? roomY : roomY + (idx - (n - 1) / 2) * 44 / (n - 1); }
 
-    const TRIAGE = { x: 300, y: 245 }; // triage desk (proposed floor, corridor between departments)
+    const TRIAGE = { x: 148, y: 125 }; // triage desk (proposed floor, beside the registration counter near the entrance)
 
     class HospitalSimulation {
       constructor(mode) {
@@ -842,11 +842,20 @@
       updateAgentPositions() {
         // Registration Queue serpentine layout (left zone)
         this.regQueue.forEach((p, idx) => {
-          const col = Math.floor(idx / 9);
-          const row = idx % 9;
-          const dir = col % 2 === 0 ? 1 : -1;
-          p.targetX = LAYOUT.regQueueOrigin.x - col * 14;
-          p.targetY = (col % 2 === 0 ? 155 : 299) + dir * row * 16;
+          if (idx < 54) {
+            const col = Math.floor(idx / 9);
+            const row = idx % 9;
+            const dir = col % 2 === 0 ? 1 : -1;
+            p.targetX = LAYOUT.regQueueOrigin.x - col * 14;
+            p.targetY = (col % 2 === 0 ? 155 : 299) + dir * row * 16;
+          } else {
+            // Long registration line (1 counter): overflow blocks below and above the main serpentine
+            const j = idx - 54;
+            const below = j < 54, k = below ? j : j - 54;
+            const col = k % 6, row = Math.floor(k / 6);
+            p.targetX = LAYOUT.regQueueOrigin.x - col * 14;
+            p.targetY = below ? 316 + Math.min(row, 9) * 14 : 140 - Math.min(row, 6) * 14;
+          }
         });
 
         // Registration Servers
@@ -861,7 +870,7 @@
         this.triageQueue.forEach((p, idx) => {
           const col = idx % 8, row = Math.floor(idx / 8);
           p.targetX = TRIAGE.x - 12 - col * 13;
-          p.targetY = TRIAGE.y + [-7, 7, -21, 21][row % 4];
+          p.targetY = TRIAGE.y + [0, -14, 14, -28][row % 4];
         });
         this.triageServers.forEach((p, i) => { if (p) { p.targetX = TRIAGE.x + 6; p.targetY = TRIAGE.y + (i - (this.triageServers.length - 1) / 2) * 12; } });
 
@@ -1028,10 +1037,10 @@
       });
 
       if (isProposed) {
-        box(186, 222, 160, 46, 6, '#efe9df', null);   // triage area (soft sand, same family as registration)
+        box(34, TRIAGE.y - 36, 146, 58, 6, '#e3dacb', null);   // triage waiting strip (slightly deeper sand)
         box(TRIAGE.x - 2, TRIAGE.y - 17, 30, 34, 4, '#fff', C.line);
         label('T', TRIAGE.x + 9, TRIAGE.y + 4, C.muted, 600, 12);
-        label('Triage' + (sim.triageServers.length > 1 ? ' ×' + sim.triageServers.length : ''), TRIAGE.x + 32, TRIAGE.y + 4, C.muted, 500, 11);
+        label('Triage' + (sim.triageServers.length > 1 ? ' ×' + sim.triageServers.length : ''), 40, TRIAGE.y - 24, C.muted, 600, 11);
       }
       sim.pharmServers.forEach((_, i) => { const pc = LAYOUT.pharmacyCounters[0], y = counterY(i, sim.pharmServers.length), hh = Math.min(40, 200 / Math.max(1, sim.pharmServers.length - 1) - 6); box(pc.x, y - hh / 2, 30, hh, 4, '#fff', C.line); label('P' + (i + 1), pc.x + 9, y + 4, C.muted, 600, 12); });
 
