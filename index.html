@@ -125,6 +125,7 @@
   .fline{font-size:var(--s);color:var(--muted);margin:2px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .flines{display:grid;grid-template-columns:1fr 1.5fr;gap:12px}
   .fline.jv{color:#6b5b95}
+  #tatSplit{color:var(--muted)} #tatSplit b.bad{color:var(--bad)} #tatSplit b.good{color:var(--good)} #tatSplit b{font-weight:600}
   .ring.jv{border-color:#6b5b95}
   .legend{margin:10px 2px 4px;gap:22px}
   .lesson{background:none;border:0;padding:0 2px;margin:0 0 18px;color:var(--text);font-size:var(--m);min-height:1.5em}
@@ -168,7 +169,7 @@
       <div id="dReg" class="delta">&nbsp;</div></div>
     <div class="n"><div class="lbl">Total time in the OPD</div>
       <div class="vals num"><span class="c" id="kpiTatCur">0m</span><span class="arrow">→</span><span class="p" id="kpiTatProp">0m</span></div>
-      <div id="dTat" class="delta">&nbsp;</div></div>
+      <div id="dTat" class="delta">&nbsp;</div><div id="tatSplit" class="delta"></div></div>
   </section>
 
   <section class="plans">
@@ -287,7 +288,7 @@
   <div class="sect"><h2>How it works</h2>
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (2 counters), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
-      <p><b>Proposed:</b> the chosen share of patients book a time slot (07:40–11:30) and go straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token numbers are pre-allocated to consultation slots (slot length = consultation time ÷ doctors, counted from 07:30): a booked patient holds the token of his slot; walk-ins get the remaining numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
+      <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
     </div>
   </div>
@@ -516,6 +517,7 @@
             id: i + 1,
             isAppt: exactAppt,
             slotTime: exactAppt ? arrivalTime : null, // booked slot time (arrives on time)
+            walkArrival: surgeMin,  // arrival time if this person walks in (used when rebalancing bookings per dept)
             deptId,
             arrivalTime,
             regFactor,
@@ -548,23 +550,44 @@
         this.patients.sort((a, b) => a.arrivalTime - b.arrivalTime);
       }
 
-      // Pre-programmed slot-token scheme (proposed): each dept's session (from 07:30) is divided into
-      // consultation slots of length L = consult time / doctors. Token k belongs to slot k (starts at (k-1)*L).
-      // Booked patients get the token of their slot (next free number if two land in one slot);
-      // walk-ins receive the lowest unreserved numbers in the order they finish vitals.
+      // Pre-programmed slot-token scheme (proposed, v10):
+      // - The booking slider sets the share r of TOKEN NUMBERS reserved for online booking, spread evenly
+      //   through the sequence: token k is reserved iff floor(k*r) > floor((k-1)*r)  (r=0.5 -> even tokens booked).
+      // - Each dept's session starts 07:30; token k's slot starts at (k-1)*L, L = consult time / doctors.
+      // - Booked patients (r x patient load, same people as before) take the reserved tokens in order and are
+      //   told to arrive BOOKING_LEAD min before their slot (time for vitals), so booked times span the session.
+      // - Walk-ins take the non-reserved tokens in the order they finish vitals.
       assignReservedTokens() {
+        const r = params.apptRatio;
         const L = (params.consultServiceTime * 2.0) / params.doctorsPerDept;
+        const BOOKING_LEAD = 15;
         this.slotLen = L;
-        for (const dept of this.deptState) { dept.reserved = new Set(); dept.nextWalkToken = 1; }
+        const isReserved = k => Math.floor(k * r + 1e-9) > Math.floor((k - 1) * r + 1e-9);
+        for (const dept of this.deptState) { dept.reserved = { has: isReserved }; dept.nextWalkToken = 1; }
         if (this.mode !== 'proposed') return;
-        const booked = this.patients.filter(p => p.isAppt).sort((a, b) => a.slotTime - b.slotTime || a.id - b.id);
-        for (const p of booked) {
-          const dept = this.deptState[p.deptId];
-          let k = Math.max(1, Math.floor(p.slotTime / L) + 1);
-          while (dept.reserved.has(k)) k++;
-          dept.reserved.add(k);
-          p.reservedToken = k;
+        // Per dept, booked patients = number of reserved tokens within the dept's load (round(N_d * r)), so the
+        // reserved tokens are filled and booked times span the session without running past it.
+        // Who books comes from the same seeded draw; only surplus/deficit per dept is rebalanced deterministically.
+        const hash = id => (Math.imul(id, 2654435761) >>> 0);
+        for (const dept of this.deptState) {
+          const inDept = this.patients.filter(p => p.deptId === dept.id);
+          let want = 0; for (let k = 1; k <= inDept.length; k++) if (isReserved(k)) want++;
+          const cur = inDept.filter(p => p.isAppt).sort((a, b) => hash(a.id) - hash(b.id));
+          const walk = inDept.filter(p => !p.isAppt).sort((a, b) => hash(a.id) - hash(b.id));
+          while (cur.length > want) { const p = cur.pop(); p.isAppt = false; p.slotTime = null; p.arrivalTime = p.walkArrival; }
+          while (cur.length < want && walk.length) { const p = walk.pop(); p.isAppt = true; p.slotTime = p.arrivalTime; cur.push(p); }
         }
+        for (const dept of this.deptState) {
+          const booked = this.patients.filter(p => p.isAppt && p.deptId === dept.id).sort((a, b) => a.slotTime - b.slotTime || a.id - b.id);
+          let k = 0;
+          for (const p of booked) {
+            do { k++; } while (!isReserved(k));
+            p.reservedToken = k;
+            p.slotTime = (k - 1) * L;                         // consultation slot start
+            p.arrivalTime = Math.max(2, p.slotTime - BOOKING_LEAD); // arrive in time for vitals
+          }
+        }
+        this.patients.sort((a, b) => a.arrivalTime - b.arrivalTime);
       }
 
       step(dt) {
@@ -1256,15 +1279,15 @@
     function pickJeevan() {
       const booked = simProposed.patients.filter(p => p.isAppt && p.id !== followId);
       const pool = booked.filter(p => p.deptId === 1).length ? booked.filter(p => p.deptId === 1) : booked;
-      pool.sort((a, b) => Math.abs(a.slotTime - 130) - Math.abs(b.slotTime - 130));
+      pool.sort((a, b) => Math.abs(a.slotTime - 160) - Math.abs(b.slotTime - 160));
       jeevanId = pool.length ? pool[0].id : null;
     }
     function describeJeevan(sim) {
       const p = sim.patients.find(q => q.id === jeevanId);
       if (!p) return '';
       const tok = p.isAppt ? `#${sim.deptState[p.deptId].prefix}${p.reservedToken}` : '';
-      const how = p.isAppt ? `booked ${formatClock(p.slotTime)} → ${tok}` : `walked in ${formatClock(p.arrivalTime)}`;
-      if (p.state === 'NOT_ARRIVED') return p.isAppt ? `at home · booked ${formatClock(p.slotTime)} → token ${tok} reserved` : `not here yet (walks in at ${formatClock(p.arrivalTime)})`;
+      const how = p.isAppt ? `slot ${formatClock(p.slotTime)} → ${tok}` : `walked in ${formatClock(p.arrivalTime)}`;
+      if (p.state === 'NOT_ARRIVED') return p.isAppt ? `at home · token ${tok} reserved, slot ${formatClock(p.slotTime)}, arrives ${formatClock(p.arrivalTime)}` : `not here yet (walks in at ${formatClock(p.arrivalTime)})`;
       if (p.isAppt && p.state === 'SEATED_TOKEN_LOUNGE') return `${how} · seated (now ${sim.deptState[p.deptId].nowServingToken})`;
       if (p.state === 'COMPLETED') return `${how} · done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} standing)`;
       let st = STAGE_TEXT[p.state] || p.state;
@@ -1298,11 +1321,17 @@
 
       // Headline (live once the morning is under way)
       const sc = computeStats(c), sp = computeStats(p);
+      const split = document.getElementById('tatSplit');
+      if (simTime > 30 && sc.avgTat > 1) {
+        const wd = Math.round(sp.avgTatWalk - sc.avgTat);
+        split.innerHTML = `Booked <b>${sp.avgTatAppt.toFixed(0)}m</b> · walk-ins <b class="${wd > 0 ? 'bad' : 'good'}">${sp.avgTatWalk.toFixed(0)}m</b> (today ${sc.avgTat.toFixed(0)}m)`;
+      } else split.textContent = '';
       if (simTime > 30 && sc.avgStanding > 1) {
         const pct = Math.round((1 - sp.avgStanding / sc.avgStanding) * 100);
-        document.getElementById('headline').textContent = pct >= 0
-          ? `Same patients, same staff: time spent standing in queues drops ${pct}%`
-          : `Same patients, same staff: time spent standing in queues rises ${-pct}%`;
+        const wPct = Math.round((sp.avgTatWalk / sc.avgTat - 1) * 100);
+        const sTxt = pct >= 0 ? `standing time drops ${pct}%` : `standing time rises ${-pct}%`;
+        const wTxt = Math.abs(wPct) < 3 ? 'walk-ins spend about the same time as today' : wPct > 0 ? `walk-ins spend ${wPct}% longer than today` : `walk-ins spend ${-wPct}% less time than today`;
+        document.getElementById('headline').textContent = `Same patients, same staff: ${sTxt}; ${wTxt}`;
       } else if (simTime === 0) {
         document.getElementById('headline').textContent = 'Same patients, same staff — two ways to run the morning OPD';
       }
