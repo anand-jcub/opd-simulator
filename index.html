@@ -233,8 +233,8 @@
           <input id="sliderRegTime" type="range" min="1.0" max="4.0" step="0.2" value="2.2" /></div>
         <div class="ctrl"><div class="top"><span>Vitals</span><span id="valVitalsTime">2.4 min</span></div>
           <input id="sliderVitalsTime" type="range" min="1.2" max="4.5" step="0.2" value="2.4" /></div>
-        <div class="ctrl"><div class="top"><span>Consultation</span><span id="valConsultTime">4.2 min</span></div>
-          <input id="sliderConsultTime" type="range" min="2.5" max="7.5" step="0.5" value="4.2" /></div>
+        <div class="ctrl"><div class="top"><span>Consultation (per patient, per doctor)</span><span id="valConsultTime">8.4 min</span></div>
+          <input id="sliderConsultTime" type="range" min="5" max="15" step="0.2" value="8.4" /></div>
         <div class="ctrl"><div class="top"><span>Pharmacy</span><span id="valPharmTime">4.4 min</span></div>
           <input id="sliderPharmTime" type="range" min="1.0" max="6.0" step="0.2" value="4.4" /></div>
         <div class="ctrl"><div class="top"><span>Walk-ins with a PIN (proposed)</span><span id="valPinPct">50%</span></div>
@@ -290,14 +290,14 @@
       <div>Peak registration queue · proposed <b id="kpiRegPeakProp">0</b></div>
       <div>Patients bypassing registration <b id="kpiRegBypassedCount">0</b></div>
       <div>Peak standing crowd at consult · current <b id="kpiConsultCrowdCur">0</b></div>
-      <div>Standing crowd at consult · proposed <b id="kpiConsultCrowdProp">0</b></div>
+      <div>Peak standing crowd at consult · proposed <b id="kpiConsultCrowdProp">0</b></div>
       <div>Avg. seated token wait · proposed <b id="kpiSeatedWaitProp">0</b></div>
       <div style="display:none">Standing time · proposed appt <b id="kpiStandPropAppt">0</b></div>
       <div style="display:none">Standing time · proposed walk-in <b id="kpiStandPropWalk">0</b></div>
       <div style="display:none">Total OPD time · proposed appt <b id="kpiTatPropAppt">0</b></div>
       <div style="display:none">Total OPD time · proposed walk-in <b id="kpiTatPropWalk">0</b></div>
-      <div>Friction index · current <b id="kpiFrictionIndexCur">0</b></div>
-      <div>Friction index · proposed <b id="kpiFrictionIndexProp">0</b></div>
+      <div>Friction index (illustrative) · current <b id="kpiFrictionIndexCur">0</b></div>
+      <div>Friction index (illustrative) · proposed <b id="kpiFrictionIndexProp">0</b></div>
     </div>
     <span id="kpiStandSaving" class="hidden"></span><span id="kpiTatDiff" class="hidden"></span>
   </div>
@@ -306,7 +306,7 @@
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (1 counter), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
       <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Both systems have 1 registration counter by default. Walk-ins with a valid PIN (slider, default 50%) skip Registration and go straight to the Triage counter beside it; walk-ins without a PIN register first, then go to Triage. Triage (default 1 counter, 0.5 min) directs each walk-in to their department's Vitals. Booked patients go straight to Vitals (optionally via Triage). Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
-      <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
+      <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index (illustrative, 0–99, same formula for both) = 1.45 × avg standing min + 0.22 × avg seated-token min + 0.25 × peak registration queue + 0.45 × peak standing crowd at the doctors' door.</p>
     </div>
   </div>
   </details>
@@ -356,7 +356,7 @@
       totalPatients: 160,     // Total morning patients
       regServiceTime: 2.2,    // mins per patient at Registration
       vitalsServiceTime: 2.4, // mins per patient at Dept Vitals (1 station per Dept)
-      consultServiceTime: 4.2,// mins per patient at Doctor Consultation (1 room per Dept, 2 docs per room)
+      consultServiceTime: 8.4,// mins one doctor spends with one patient (2 doctors per dept work in parallel)
       pharmServiceTime: 4.4,  // mins per patient at Pharmacy - realistic dispensing, forms a peak queue
       // Staffing (applies to both systems)
       regCounters: 1,         // registration counters (1 on both sides by default)
@@ -490,6 +490,7 @@
         this.triageQueue = [];
         this.triageServers = new Array(params.triageCounters).fill(null);
         this.peakConsultCrowd = 0;
+        this.peakDoorStanding = 0; // people standing (no token) at the doctors' door
         this.bypassedRegCount = 0;
 
         this.generateSchedule();
@@ -512,6 +513,7 @@
         const slotSpan = 240 - 10; // 07:40 AM (t=10) .. 11:30 AM (t=240)
 
         // Create base patient attributes identically across both models
+        const pharmRng = createSeededRandom(77101); // separate stream so other draws are unchanged
         for (let i = 0; i < N; i++) {
           const r1 = this.rng();
           const r2 = this.rng();
@@ -542,7 +544,7 @@
           const regFactor = 0.85 + r2 * 0.30;
           const vitalsFactor = 0.85 + r3 * 0.30;
           const consultFactor = 0.85 + r4 * 0.30;
-          const pharmFactor = 0.85 + r1 * 0.30;
+          const pharmFactor = 0.85 + pharmRng() * 0.30; // own stream: independent of arrival, same per patient in both arms
 
           this.patients.push({
             id: i + 1,
@@ -591,7 +593,7 @@
       // - Walk-ins take the non-reserved tokens in the order they finish vitals.
       assignReservedTokens() {
         const r = params.apptRatio;
-        const L = (params.consultServiceTime * 2.0) / params.doctorsPerDept;
+        const L = params.consultServiceTime / params.doctorsPerDept;
         const BOOKING_LEAD = 15;
         this.slotLen = L;
         const isReserved = k => Math.floor(k * r + 1e-9) > Math.floor((k - 1) * r + 1e-9);
@@ -738,6 +740,8 @@
                 dept.consultQueue.push(activeP);
                 const totalConsultCrowd = this.deptState[0].consultQueue.length + this.deptState[1].consultQueue.length;
                 if (totalConsultCrowd > this.peakConsultCrowd) this.peakConsultCrowd = totalConsultCrowd;
+                const door = this.deptState[0].consultQueue.concat(this.deptState[1].consultQueue).filter(q => q.state === 'QUEUE_CONSULT_STANDING').length;
+                if (door > this.peakDoorStanding) this.peakDoorStanding = door;
               }
             }
 
@@ -797,7 +801,7 @@
               nextP.docIdx = docIdx;
               // Identical consultation service time in both modes
               const consultEfficiency = 1.0; // no hidden mode bonus (was 0.93x for proposed)
-              nextP.serviceRemaining = params.consultServiceTime * (2.0) * nextP.consultFactor * consultEfficiency;
+              nextP.serviceRemaining = params.consultServiceTime * nextP.consultFactor * consultEfficiency;
               dept.consultServers[docIdx] = nextP;
               if (this.mode === 'proposed' && nextP.tokenLabel) {
                 dept.nowServingToken = nextP.tokenLabel;
@@ -1110,15 +1114,15 @@
       const avgPharmWait = safeAvg(allEntered, p => p.pharmWaitTime);
 
       // Turnaround Time (TAT) for completed patients (or estimate from active if early in morning)
-      const tatPool = served.length >= 5 ? served : allEntered;
-      const avgTat = safeAvg(tatPool, p => (p.completionTime ? (p.completionTime - p.arrivalTime) : (p.standingTime + p.seatedTokenTime + 11)));
-      const avgTatAppt = safeAvg(tatPool.filter(p => p.isAppt), p => (p.completionTime ? (p.completionTime - p.arrivalTime) : (p.standingTime + p.seatedTokenTime + 9)));
-      const avgTatWalk = safeAvg(tatPool.filter(p => !p.isAppt), p => (p.completionTime ? (p.completionTime - p.arrivalTime) : (p.standingTime + p.seatedTokenTime + 11)));
+      // Total time: finished patients only (no estimates for those still inside)
+      const tatPool = served;
+      const avgTat = safeAvg(tatPool, p => p.completionTime - p.arrivalTime);
+      const avgTatAppt = safeAvg(tatPool.filter(p => p.isAppt), p => p.completionTime - p.arrivalTime);
+      const avgTatWalk = safeAvg(tatPool.filter(p => !p.isAppt), p => p.completionTime - p.arrivalTime);
 
-      // Patient Friction Index (0 - 100):
-      // Standing in unnumbered lines has high physiological & psychological stress (weight 1.6),
-      // while seated token wait has low friction (weight 0.25), plus peak crowd penalty.
-      const rawFriction = (avgStanding * 1.45) + (avgSeated * 0.22) + (sim.peakRegQueue * 0.25) + (sim.mode === 'current' ? sim.peakConsultCrowd * 0.45 : 0);
+      // Friction index (illustrative, capped at 99), same formula for both systems:
+      // 1.45 × avg standing min + 0.22 × avg seated-token min + 0.25 × peak registration queue + 0.45 × peak standing crowd at the doctors' door.
+      const rawFriction = (avgStanding * 1.45) + (avgSeated * 0.22) + (sim.peakRegQueue * 0.25) + (sim.peakDoorStanding * 0.45);
       const frictionIndex = Math.min(99, Math.round(rawFriction));
 
       return {
@@ -1255,8 +1259,8 @@
       document.getElementById('kpiRegBypassedCount').textContent = `${simProposed.bypassedRegCount}`;
 
       // KPI Card 3: Consultation Doorway Crowd vs Seated Token Lounge
-      document.getElementById('kpiConsultCrowdCur').textContent = `${simCurrent.peakConsultCrowd}`;
-      document.getElementById('kpiConsultCrowdProp').textContent = `0`;
+      document.getElementById('kpiConsultCrowdCur').textContent = `${simCurrent.peakDoorStanding}`;
+      document.getElementById('kpiConsultCrowdProp').textContent = `${simProposed.peakDoorStanding}`;
       document.getElementById('kpiSeatedWaitProp').textContent = `${stProp.avgSeated.toFixed(1)}m`;
       document.getElementById('kpiFrictionIndexCur').textContent = stCur.frictionIndex;
       document.getElementById('kpiFrictionIndexProp').textContent = stProp.frictionIndex;
@@ -1454,14 +1458,15 @@
         const wd = Math.round(sp.avgTatWalk - sc.avgTat);
         split.innerHTML = `Booked <b>${sp.avgTatAppt.toFixed(0)}m</b> · walk-ins <b class="${wd > 0 ? 'bad' : 'good'}">${sp.avgTatWalk.toFixed(0)}m</b> (today ${sc.avgTat.toFixed(0)}m)`;
       } else split.textContent = '';
-      if (simTime > 30 && sc.avgStanding > 1) {
+      const ended = simTime >= SIM_DURATION_MAX - 1e-9;
+      if (ended && sc.avgStanding > 1 && sc.avgTat > 0) {
         const pct = Math.round((1 - sp.avgStanding / sc.avgStanding) * 100);
         const wPct = Math.round((sp.avgTatWalk / sc.avgTat - 1) * 100);
         const sTxt = pct >= 0 ? `standing time drops ${pct}%` : `standing time rises ${-pct}%`;
         const wTxt = Math.abs(wPct) < 3 ? 'walk-ins spend about the same time as today' : wPct > 0 ? `walk-ins spend ${wPct}% longer than today` : `walk-ins spend ${-wPct}% less time than today`;
-        document.getElementById('headline').textContent = `Same patients, same staff: ${sTxt}; ${wTxt}`;
-      } else if (simTime === 0) {
-        document.getElementById('headline').textContent = 'Same patients, same staff — two ways to run the morning OPD';
+        document.getElementById('headline').textContent = `Morning over: ${sTxt}; ${wTxt} (finished patients)`;
+      } else if (!ended) {
+        document.getElementById('headline').textContent = simTime === 0 ? 'Same patients, same staff — two ways to run the morning OPD' : 'Same patients, same staff — watch where people wait; final numbers at 01:30 PM';
       }
 
       // Lesson only at milestones
@@ -1588,16 +1593,16 @@
       const val = e.target.value;
       if (val === 'default') {
         params.apptRatio = 0.50; params.totalPatients = 160;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 4.2; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'heavy_surge') {
         params.apptRatio = 0.50; params.totalPatients = 220;
-        params.regServiceTime = 2.4; params.vitalsServiceTime = 2.5; params.consultServiceTime = 4.5; params.pharmServiceTime = 4.6;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'high_digital') {
-        params.apptRatio = 0.75; params.totalPatients = 180;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.2; params.consultServiceTime = 4.2; params.pharmServiceTime = 4.4;
+        params.apptRatio = 0.75; params.totalPatients = 160;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'slow_consult') {
         params.apptRatio = 0.50; params.totalPatients = 160;
-        params.regServiceTime = 2.0; params.vitalsServiceTime = 2.4; params.consultServiceTime = 6.5; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 13.0; params.pharmServiceTime = 4.4;
       }
 
       // Sync UI slider values
