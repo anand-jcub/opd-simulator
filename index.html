@@ -7,7 +7,7 @@
 <style>
   :root{
     --bg:#f6f7f9; --card:#ffffff; --line:#e3e6ea; --text:#1f2a37; --muted:#6b7280;
-    --cur:#c8645a; --prop:#2f8f86; --appt:#3b6fd8; --walk:#b8893f;
+    --cur:#c8645a; --prop:#2f8f86; --appt:#3b6fd8; --walk:#c2621f; --walkpin:#eba05a;
     --good:#2e8b57; --bad:#c0392b;
     --s:12px; --m:14px; --l:22px;
   }
@@ -41,7 +41,7 @@
   .kpi .v{font-size:var(--l);font-weight:600}
   .kpi .tag{font-size:var(--s);color:var(--muted);display:flex;align-items:center;gap:6px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%}
-  .d-cur{background:var(--cur)} .d-prop{background:var(--prop)} .d-appt{background:var(--appt)} .d-walk{background:var(--walk)}
+  .d-cur{background:var(--cur)} .d-prop{background:var(--prop)} .d-appt{background:var(--appt)} .d-walk{background:var(--walk)} .d-walkpin{background:var(--walkpin)}
   .delta{font-size:var(--s);margin-top:6px;color:var(--muted)}
   .delta.good{color:var(--good)} .delta.bad{color:var(--bad)}
   /* floorplans */
@@ -190,7 +190,8 @@
   </section>
   <div class="legend">
     <span><span class="dot d-appt"></span> Booked</span>
-    <span><span class="dot d-walk"></span> Walk-in</span>
+    <span><span class="dot d-walk"></span> Walk-in (no PIN)</span>
+    <span><span class="dot d-walkpin"></span> Walk-in with PIN (proposed)</span>
     <span><span class="ring"></span> <span id="followName">Anitha</span> (click any dot to follow someone else)</span>
     <span><span class="ring jv"></span> Jeevan — walks in today, books an appointment in the proposed system</span>
   </div>
@@ -226,12 +227,17 @@
           <input id="sliderConsultTime" type="range" min="2.5" max="7.5" step="0.5" value="4.2" /></div>
         <div class="ctrl"><div class="top"><span>Pharmacy</span><span id="valPharmTime">4.4 min</span></div>
           <input id="sliderPharmTime" type="range" min="1.0" max="6.0" step="0.2" value="4.4" /></div>
+        <div class="ctrl"><div class="top"><span>Walk-ins with a PIN (proposed)</span><span id="valPinPct">50%</span></div>
+          <input id="sliderPinPct" type="range" min="0" max="100" step="10" value="50" /></div>
+        <div class="ctrl"><div class="top"><span>Triage</span><span id="valTriageTime">0.5 min</span></div>
+          <input id="sliderTriageTime" type="range" min="0.2" max="2.0" step="0.1" value="0.5" /></div>
       </div>
       <h2 style="margin-top:16px">Staff (both systems)</h2>
       <div class="staff">
         <div class="stepper" data-key="regCounters"><span>Registration counters</span><button data-d="-1" aria-label="fewer">−</button><output>2</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="vitalsNurses"><span>Vitals nurses / dept</span><button data-d="-1" aria-label="fewer">−</button><output>1</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="doctorsPerDept"><span>Doctors / dept</span><button data-d="-1" aria-label="fewer">−</button><output>2</output><button data-d="1" aria-label="more">+</button></div>
+        <div class="stepper" data-key="triageCounters"><span>Triage counters (proposed)</span><button data-d="-1" aria-label="fewer">−</button><output>1</output><button data-d="1" aria-label="more">+</button></div>
         <div class="stepper" data-key="pharmCounters"><span>Pharmacy counters</span><button data-d="-1" aria-label="fewer">−</button><output>2</output><button data-d="1" aria-label="more">+</button></div>
       </div>
       <details class="policies">
@@ -240,6 +246,7 @@
           <label><input type="radio" name="vitalsPolicy" value="alternate" checked> Take turns between lanes</label>
           <label><input type="radio" name="vitalsPolicy" value="apptFirst"> Appointment lane first</label>
           <label><input type="radio" name="vitalsPolicy" value="walkFirst"> Walk-in lane first</label></div>
+        <label class="small" style="display:block;padding:0 12px 8px"><input type="checkbox" id="chkBookedTriage"> Booked patients also pass triage (default: straight to their department's vitals)</label>
         <p class="small muted" style="margin:6px 0 0">Doctors have no calling choice: tokens are called strictly in number order.</p>
       </details>
       <p class="small muted" style="margin:12px 0 0">Service times are per patient. Changing share, volume, staff or policy restarts the morning.</p>
@@ -288,7 +295,7 @@
   <div class="sect"><h2>How it works</h2>
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (2 counters), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
-      <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
+      <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Walk-ins with a valid PIN (slider, default 50%) skip Registration and go straight to the Triage counter; walk-ins without a PIN register first, then go to Triage. Triage (default 1 counter, 0.5 min) directs each walk-in to their department's Vitals. Booked patients go straight to Vitals (optionally via Triage). Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index = weighted standing time + seated time + peak crowd penalties (0–99).</p>
     </div>
   </div>
@@ -341,6 +348,11 @@
       vitalsNurses: 1,        // vitals nurses per department
       doctorsPerDept: 2,      // doctors per department
       pharmCounters: 2,       // pharmacy counters
+      // Triage / routing counter (proposed only)
+      triageCounters: 1,      // triage counters
+      triageServiceTime: 0.5, // min per patient at triage
+      pinRatio: 0.5,          // share of walk-ins holding a valid PIN (skip registration, go straight to triage)
+      bookedViaTriage: false, // if true, booked patients also pass triage (default: straight to dept vitals)
       // Calling policies (proposed system)
       vitalsPolicy: 'alternate'  // 'alternate' | 'apptFirst' | 'walkFirst'
     };
@@ -420,6 +432,8 @@
     function counterY(idx, n) { if (n <= 1) return 235; const gap = Math.min(80, 200 / (n - 1)); return 235 + (idx - (n - 1) / 2) * gap; }
     function doctorY(roomY, idx, n) { return n <= 1 ? roomY : roomY + (idx - (n - 1) / 2) * 44 / (n - 1); }
 
+    const TRIAGE = { x: 300, y: 245 }; // triage desk (proposed floor, corridor between departments)
+
     class HospitalSimulation {
       constructor(mode) {
         this.mode = mode; // 'current' or 'proposed'
@@ -458,6 +472,8 @@
 
         // Peak & cumulative metrics
         this.peakRegQueue = 0;
+        this.triageQueue = [];
+        this.triageServers = new Array(params.triageCounters).fill(null);
         this.peakConsultCrowd = 0;
         this.bypassedRegCount = 0;
 
@@ -538,6 +554,7 @@
             standingTime: 0,       // High-friction physical standing queue time
             seatedTokenTime: 0,    // Low-friction seated token waiting time
             regWaitTime: 0,
+            triageWaitTime: 0,
             vitalsWaitTime: 0,
             consultWaitTime: 0,
             pharmWaitTime: 0,
@@ -588,6 +605,11 @@
           }
         }
         this.patients.sort((a, b) => a.arrivalTime - b.arrivalTime);
+        // Walk-ins with a valid PIN: exactly round(walk-ins x pinRatio), chosen by a fixed hash of the patient id
+        const h2 = id => (Math.imul(id ^ 0x5bd1e995, 2246822519) >>> 0);
+        const walkIns = this.patients.filter(p => !p.isAppt).sort((a, b) => h2(a.id) - h2(b.id));
+        const nPin = Math.round(walkIns.length * params.pinRatio);
+        walkIns.forEach((p, i) => { p.hasPin = i < nPin; });
       }
 
       step(dt) {
@@ -595,10 +617,14 @@
         for (const p of this.patients) {
           if (p.state === 'NOT_ARRIVED' && simTime >= p.arrivalTime) {
             if (this.mode === 'proposed' && p.isAppt) {
-              // Proposed System Appointment Patients BYPASS Registration and go directly to Department Vitals!
-              p.state = 'WALKING_TO_VITALS';
-              p.walkTimer = 1.2; // 1.2 mins walk from entrance to Dept Vitals
+              // Proposed: booked patients bypass Registration (and, by default, Triage) -> Dept Vitals
               this.bypassedRegCount++;
+              if (params.bookedViaTriage) { p.state = 'QUEUE_TRIAGE'; this.triageQueue.push(p); }
+              else { p.state = 'WALKING_TO_VITALS'; p.walkTimer = 1.2; }
+            } else if (this.mode === 'proposed' && p.hasPin) {
+              // Proposed: walk-in with a valid PIN skips Registration, goes straight to Triage
+              this.bypassedRegCount++;
+              p.state = 'QUEUE_TRIAGE'; this.triageQueue.push(p);
             } else {
               // Walk-In Patients join the Registration Counter Queue
               p.state = 'QUEUE_REG';
@@ -616,9 +642,9 @@
           if (activeP) {
             activeP.serviceRemaining -= dt;
             if (activeP.serviceRemaining <= 0) {
-              // Finished Registration -> Guided to Department Vitals
-              activeP.state = 'WALKING_TO_VITALS';
-              activeP.walkTimer = 1.0;
+              // Finished Registration -> Today: to Dept Vitals; Proposed: to Triage
+              if (this.mode === 'proposed') { activeP.state = 'QUEUE_TRIAGE'; this.triageQueue.push(activeP); }
+              else { activeP.state = 'WALKING_TO_VITALS'; activeP.walkTimer = 1.0; }
               this.regServers[c] = null;
             }
           }
@@ -628,6 +654,25 @@
             nextP.serverIdx = c;
             nextP.serviceRemaining = params.regServiceTime * nextP.regFactor;
             this.regServers[c] = nextP;
+          }
+        }
+
+        // 2b. Triage / routing counter(s) (proposed): directs each patient to their dept's vitals
+        for (let c = 0; c < this.triageServers.length; c++) {
+          const activeP = this.triageServers[c];
+          if (activeP) {
+            activeP.serviceRemaining -= dt;
+            if (activeP.serviceRemaining <= 0) {
+              activeP.state = 'WALKING_TO_VITALS';
+              activeP.walkTimer = 0.8;
+              this.triageServers[c] = null;
+            }
+          }
+          if (!this.triageServers[c] && this.triageQueue.length > 0) {
+            const nextP = this.triageQueue.shift();
+            nextP.state = 'SERVING_TRIAGE';
+            nextP.serviceRemaining = params.triageServiceTime;
+            this.triageServers[c] = nextP;
           }
         }
 
@@ -769,7 +814,10 @@
 
         // 7. Accumulate Wait & Friction Metrics for Active Patients
         for (const p of this.patients) {
-          if (p.state === 'QUEUE_REG') {
+          if (p.state === 'QUEUE_TRIAGE') {
+            p.triageWaitTime += dt;
+            p.standingTime += dt; // standing in triage line
+          } else if (p.state === 'QUEUE_REG') {
             p.regWaitTime += dt;
             p.standingTime += dt; // Standing in Registration Queue = High Friction
           } else if (p.state === 'QUEUE_VITALS_SINGLE' || p.state === 'QUEUE_VITALS_APPT' || p.state === 'QUEUE_VITALS_WALK') {
@@ -808,6 +856,14 @@
             p.targetY = counterY(idx, this.regServers.length);
           }
         });
+
+        // Triage line (corridor between depts, proposed) & counters
+        this.triageQueue.forEach((p, idx) => {
+          const col = idx % 8, row = Math.floor(idx / 8);
+          p.targetX = TRIAGE.x - 12 - col * 13;
+          p.targetY = TRIAGE.y + [-7, 7, -21, 21][row % 4];
+        });
+        this.triageServers.forEach((p, i) => { if (p) { p.targetX = TRIAGE.x + 6; p.targetY = TRIAGE.y + (i - (this.triageServers.length - 1) / 2) * 12; } });
 
         // Walking to Vitals
         for (const p of this.patients) {
@@ -917,7 +973,7 @@
       const W = LOGICAL_W, H = LOGICAL_H, PX = ctx._px || 1;
       const LWD = Math.max(1, Math.round(window.devicePixelRatio || 1)); // ~1 CSS px hairline, whole device pixels
       const snap = v => Math.round(v / PX) * PX + (LWD % 2 ? PX / 2 : 0); // align lines to the device pixel grid
-      const C = { ink: '#1f2a37', muted: '#6f7780', line: '#cfd5da', zone: '#eef2f3', accent: isProposed ? '#2f8f86' : '#c8645a', appt: '#3b6fd8', walk: '#b8893f' };
+      const C = { ink: '#1f2a37', muted: '#6f7780', line: '#cfd5da', zone: '#eef2f3', accent: isProposed ? '#2f8f86' : '#c8645a', appt: '#3b6fd8', walk: '#c2621f', walkPin: '#eba05a' };
       const FONT = '"Inter","Segoe UI",system-ui,Arial,sans-serif';
       const label = (txt, x, y, color = C.muted, weight = 500, size = 10) => { ctx.fillStyle = color; ctx.font = `${weight} ${size}px ${FONT}`; ctx.fillText(txt, x, y); };
       const box = (x, y, w, h, r, fill, stroke, lw = 1) => { const x0 = snap(x), y0 = snap(y); ctx.beginPath(); ctx.roundRect(x0, y0, snap(x + w) - x0, snap(y + h) - y0, r); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = LWD * PX; ctx.stroke(); } };
@@ -971,12 +1027,18 @@
         if (isProposed) label(`Now ${dept.nowServingToken}`, dLayout.consultRoom.x - 12, dLayout.consultRoom.y - 56, C.accent, 600, 12);
       });
 
+      if (isProposed) {
+        box(186, 222, 160, 46, 6, '#efe9df', null);   // triage area (soft sand, same family as registration)
+        box(TRIAGE.x - 2, TRIAGE.y - 17, 30, 34, 4, '#fff', C.line);
+        label('T', TRIAGE.x + 9, TRIAGE.y + 4, C.muted, 600, 12);
+        label('Triage' + (sim.triageServers.length > 1 ? ' ×' + sim.triageServers.length : ''), TRIAGE.x + 32, TRIAGE.y + 4, C.muted, 500, 11);
+      }
       sim.pharmServers.forEach((_, i) => { const pc = LAYOUT.pharmacyCounters[0], y = counterY(i, sim.pharmServers.length), hh = Math.min(40, 200 / Math.max(1, sim.pharmServers.length - 1) - 6); box(pc.x, y - hh / 2, 30, hh, 4, '#fff', C.line); label('P' + (i + 1), pc.x + 9, y + 4, C.muted, 600, 12); });
 
       for (const p of sim.patients) {
         if (p.state === 'NOT_ARRIVED' || p.state === 'COMPLETED') continue;
         ctx.beginPath(); ctx.arc(p.x, p.y, 5.2, 0, Math.PI * 2);
-        ctx.fillStyle = p.isAppt ? C.appt : C.walk; ctx.fill();
+        ctx.fillStyle = p.isAppt ? C.appt : (isProposed && p.hasPin ? C.walkPin : C.walk); ctx.fill();
         ctx.lineWidth = 1; ctx.strokeStyle = '#ffffff'; ctx.stroke();
         if (isProposed && p.tokenLabel && (p.state === 'SEATED_TOKEN_LOUNGE' || p.state === 'SERVING_CONSULT')) {
           box(p.x - 9, p.y - 16, 18, 10, 2, 'rgba(255,255,255,0.92)', '#cfd4da', 0.8);
@@ -1013,6 +1075,7 @@
       const avgSeated = safeAvg(allEntered, p => p.seatedTokenTime);
 
       const avgRegWait = safeAvg(allEntered, p => p.regWaitTime);
+      const avgTriageWait = safeAvg(allEntered, p => p.triageWaitTime || 0);
       const avgRegWaitWalk = safeAvg(walks, p => p.regWaitTime);
 
       const avgVitWait = safeAvg(allEntered, p => p.vitalsWaitTime);
@@ -1042,6 +1105,7 @@
         avgStandingWalk,
         avgSeated,
         avgRegWait,
+        avgTriageWait,
         avgRegWaitWalk,
         avgVitWait,
         avgVitWaitAppt,
@@ -1240,7 +1304,7 @@
     }
     const STAGE_TEXT = {
       NOT_ARRIVED: 'not arrived yet', QUEUE_REG: 'standing in the registration line', SERVING_REG: 'at a registration counter',
-      WALKING_TO_VITALS: 'walking to vitals', QUEUE_VITALS_SINGLE: 'standing in the vitals line', QUEUE_VITALS_APPT: 'standing in the appointment lane at vitals',
+      WALKING_TO_VITALS: 'walking to vitals', QUEUE_TRIAGE: 'in the triage line', SERVING_TRIAGE: 'at triage', QUEUE_VITALS_SINGLE: 'standing in the vitals line', QUEUE_VITALS_APPT: 'standing in the appointment lane at vitals',
       QUEUE_VITALS_WALK: 'standing in the walk-in lane at vitals', SERVING_VITALS: 'having vitals taken', QUEUE_CONSULT_STANDING: 'standing at the doctor\'s door, no number',
       SEATED_TOKEN_LOUNGE: 'seated, waiting for token', SERVING_CONSULT: 'with the doctor', QUEUE_PHARM: 'in the pharmacy line', SERVING_PHARM: 'at a pharmacy counter', COMPLETED: 'finished and gone home'
     };
@@ -1250,6 +1314,7 @@
       let st = STAGE_TEXT[p.state] || p.state;
       if (p.state === 'SEATED_TOKEN_LOUNGE' && p.tokenLabel) st = `seated with token ${p.tokenLabel}`;
       if (p.state === 'NOT_ARRIVED' && p.isAppt) st = `at home, booked for ${formatClock(p.slotTime)}`;
+      if (sim.mode === 'proposed' && !p.isAppt && p.state === 'NOT_ARRIVED') return `${followName}: not here yet${p.hasPin ? ' (has a PIN)' : ''}.`;
       if (p.state === 'COMPLETED') return `${followName}: done in ${Math.round(p.completionTime - p.arrivalTime)} min (${Math.round(p.standingTime)} min of it standing).`;
       if (p.state === 'NOT_ARRIVED') return `${followName}: ${st}.`;
       return `${followName}: ${st} · ${Math.round(simTime - p.arrivalTime)} min in the OPD, ${Math.round(p.standingTime)} of them standing.`;
@@ -1307,7 +1372,7 @@
       const cCon = sumQ(c, 'consultQueue'), pCon = sumQ(p, 'consultQueue');
       const atHome = p.patients.filter(q => q.state === 'NOT_ARRIVED' && q.isAppt).length;
       const cStand = cReg + cVit + cCon + c.pharmQueue.length;
-      const pStand = pReg + pVit + p.pharmQueue.length;
+      const pStand = pReg + pVit + p.pharmQueue.length + p.triageQueue.length;
       const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
       document.getElementById('storyCur').textContent =
         `${cap(plural(cStand, 'person', 'people'))} standing in lines` + (cCon ? `, ${cCon} of them crowding the doctors' doors.` : '.');
@@ -1441,9 +1506,14 @@
     bindSlider('sliderVitalsTime', 'valVitalsTime', 'vitalsServiceTime', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderConsultTime', 'valConsultTime', 'consultServiceTime', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderPharmTime', 'valPharmTime', 'pharmServiceTime', v => `${v.toFixed(1)} min`, false);
+    bindSlider('sliderTriageTime', 'valTriageTime', 'triageServiceTime', v => `${v.toFixed(1)} min`, false);
+    document.getElementById('sliderPinPct').addEventListener('input', (e) => {
+      params.pinRatio = (+e.target.value) / 100; document.getElementById('valPinPct').textContent = `${e.target.value}%`; resetSimulations();
+    });
+    document.getElementById('chkBookedTriage').addEventListener('change', (e) => { params.bookedViaTriage = e.target.checked; resetSimulations(); });
 
     // Staffing steppers (restart the morning)
-    const STAFF = { regCounters: [1, 4], vitalsNurses: [1, 3], doctorsPerDept: [1, 4], pharmCounters: [1, 4] };
+    const STAFF = { triageCounters: [1, 3], regCounters: [1, 4], vitalsNurses: [1, 3], doctorsPerDept: [1, 4], pharmCounters: [1, 4] };
     document.querySelectorAll('.stepper').forEach(st => {
       const key = st.dataset.key, out = st.querySelector('output');
       st.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
