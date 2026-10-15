@@ -231,8 +231,10 @@
           <input id="sliderPatientVol" type="range" min="80" max="240" step="20" value="160" /></div>
         <div class="ctrl"><div class="top"><span>Registration</span><span id="valRegTime">2.2 min</span></div>
           <input id="sliderRegTime" type="range" min="1.0" max="4.0" step="0.2" value="2.2" /></div>
-        <div class="ctrl"><div class="top"><span>Vitals</span><span id="valVitalsTime">2.4 min</span></div>
+        <div class="ctrl"><div class="top"><span>Vitals · proposed</span><span id="valVitalsTime">2.4 min</span></div>
           <input id="sliderVitalsTime" type="range" min="1.2" max="4.5" step="0.2" value="2.4" /></div>
+        <div class="ctrl"><div class="top"><span>Vitals · today</span><span id="valVitalsTimeToday">4.0 min</span></div>
+          <input id="sliderVitalsTimeToday" type="range" min="1.2" max="7.0" step="0.2" value="4.0" /></div>
         <div class="ctrl"><div class="top"><span>Consultation (per patient, per doctor)</span><span id="valConsultTime">8.4 min</span></div>
           <input id="sliderConsultTime" type="range" min="5" max="15" step="0.2" value="8.4" /></div>
         <div class="ctrl"><div class="top"><span>Pharmacy</span><span id="valPharmTime">4.4 min</span></div>
@@ -306,6 +308,7 @@
     <div class="body">
       <p><b>Current:</b> every patient walks in, stands in line at Registration (1 counter), then in a single line at their department's Vitals desk, then stands outside the consultation room (2 doctors per department), then queues at Pharmacy (2 counters).</p>
       <p><b>Proposed:</b> the booking slider sets the share of token numbers reserved for online booking, spread evenly (50% = every second token). The same share of patients book; each gets the next reserved token, its slot time, and is asked to arrive 15 min before it, going straight to Vitals; walk-ins still register. Both systems have 1 registration counter by default. Walk-ins with a valid PIN (slider, default 50%) skip Registration and go straight to the Triage counter beside it; walk-ins without a PIN register first, then go to Triage. Triage (default 1 counter, 0.5 min) directs each walk-in to their department's Vitals. Booked patients go straight to Vitals (optionally via Triage). Each Vitals desk keeps two lines (appointment / walk-in) served alternately. Token k's slot starts at (k−1) × slot length (consultation time ÷ doctors, from 07:30). Walk-ins get the non-reserved numbers in the order they finish vitals. Doctors call strictly by token number. If a booked patient's number comes up before he is seated, the next ready number is called and he goes in as soon as he is ready (he then holds the lowest number).</p>
+      <p><b>Assumption:</b> a vitals check takes longer today (4.0 min vs 2.4 min proposed, 1 nurse per department in both by default): the nurse writes details by hand with no pre-registered record, and works amid a standing crowd at the bay. Both can be changed under Try changes.</p>
       <p>Both systems use the identical patient cohort (same random seed, departments and service times) and identical staffing; only arrival pattern, routing and queue discipline differ. "Standing time" counts time in standing queues; seated token waiting is reported separately. Friction index (illustrative, 0–99, same formula for both) = 1.45 × avg standing min + 0.22 × avg seated-token min + 0.25 × peak registration queue + 0.45 × peak standing crowd at the doctors' door.</p>
     </div>
   </div>
@@ -355,7 +358,8 @@
       apptRatio: 0.50,        // 50% pre-booked appointments
       totalPatients: 160,     // Total morning patients
       regServiceTime: 2.2,    // mins per patient at Registration
-      vitalsServiceTime: 2.4, // mins per patient at Dept Vitals (1 station per Dept)
+      vitalsServiceTime: 2.4, // mins per patient at Dept Vitals, proposed (details already captured at booking/registration, seated lanes)
+      vitalsServiceTimeToday: 4.0, // mins per patient at Dept Vitals, today (manual entry, no pre-registered data, crowd at the bay)
       consultServiceTime: 8.4,// mins one doctor spends with one patient (2 doctors per dept work in parallel)
       pharmServiceTime: 4.4,  // mins per patient at Pharmacy - realistic dispensing, forms a peak queue
       // Staffing (applies to both systems)
@@ -766,7 +770,7 @@
               if (nextP) {
                 nextP.state = 'SERVING_VITALS';
                 nextP.nurseIdx = n;
-                nextP.serviceRemaining = params.vitalsServiceTime * nextP.vitalsFactor; // identical in both modes
+                nextP.serviceRemaining = (this.mode === 'current' ? params.vitalsServiceTimeToday : params.vitalsServiceTime) * nextP.vitalsFactor; // today's check is slower (see How it works)
                 dept.vitalsServers[n] = nextP;
               }
             }
@@ -1564,6 +1568,7 @@
     bindSlider('sliderPatientVol', 'valPatientVol', 'totalPatients', v => `${v} Patients`, true);
     bindSlider('sliderRegTime', 'valRegTime', 'regServiceTime', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderVitalsTime', 'valVitalsTime', 'vitalsServiceTime', v => `${v.toFixed(1)} min`, false);
+    bindSlider('sliderVitalsTimeToday', 'valVitalsTimeToday', 'vitalsServiceTimeToday', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderConsultTime', 'valConsultTime', 'consultServiceTime', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderPharmTime', 'valPharmTime', 'pharmServiceTime', v => `${v.toFixed(1)} min`, false);
     bindSlider('sliderTriageTime', 'valTriageTime', 'triageServiceTime', v => `${v.toFixed(1)} min`, false);
@@ -1593,16 +1598,16 @@
       const val = e.target.value;
       if (val === 'default') {
         params.apptRatio = 0.50; params.totalPatients = 160;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.vitalsServiceTimeToday = 4.0; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'heavy_surge') {
         params.apptRatio = 0.50; params.totalPatients = 220;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.vitalsServiceTimeToday = 4.0; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'high_digital') {
         params.apptRatio = 0.75; params.totalPatients = 160;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.vitalsServiceTimeToday = 4.0; params.consultServiceTime = 8.4; params.pharmServiceTime = 4.4;
       } else if (val === 'slow_consult') {
         params.apptRatio = 0.50; params.totalPatients = 160;
-        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.consultServiceTime = 13.0; params.pharmServiceTime = 4.4;
+        params.regServiceTime = 2.2; params.vitalsServiceTime = 2.4; params.vitalsServiceTimeToday = 4.0; params.consultServiceTime = 13.0; params.pharmServiceTime = 4.4;
       }
 
       // Sync UI slider values
@@ -1615,6 +1620,8 @@
       document.getElementById('valRegTime').textContent = `${params.regServiceTime.toFixed(1)} min`;
       document.getElementById('sliderVitalsTime').value = params.vitalsServiceTime;
       document.getElementById('valVitalsTime').textContent = `${params.vitalsServiceTime.toFixed(1)} min`;
+      document.getElementById('sliderVitalsTimeToday').value = params.vitalsServiceTimeToday;
+      document.getElementById('valVitalsTimeToday').textContent = `${params.vitalsServiceTimeToday.toFixed(1)} min`;
       document.getElementById('sliderConsultTime').value = params.consultServiceTime;
       document.getElementById('valConsultTime').textContent = `${params.consultServiceTime.toFixed(1)} min`;
       document.getElementById('sliderPharmTime').value = params.pharmServiceTime;
